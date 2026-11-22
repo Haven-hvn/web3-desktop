@@ -522,6 +522,20 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     bridgeHostRef.current?.broadcast(
       "keyringChanged",
+      unlockedKeys.map((k) => ({
+        gateKey: k.gateKey,
+        cacheKey: k.cacheKey,
+        chainVariant: k.chainVariant,
+        tokenAddress: k.tokenAddress,
+        threshold: k.threshold,
+        epoch: k.epoch,
+      })),
+    );
+  }, [unlockedKeys]);
+
+  useEffect(() => {
+    bridgeHostRef.current?.broadcast(
+      "keyringChanged",
       unlockedKeys.map((k) => k.gateKey),
     );
   }, [unlockedKeys]);

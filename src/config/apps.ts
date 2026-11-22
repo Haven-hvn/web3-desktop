@@ -91,7 +91,7 @@ export const APP_CATALOG: Record<AppId, AppDefinition> = {
     name: "The Haven Bay",
     glyph: "🏴‍☠️",
     category: "Haven Core",
-    render: { kind: "iframe", url: "/apps/haven-bay/index.html" },
+    render: { kind: "iframe", url: "https://haven-bay.pinme.dev/" },
     description: "Classic Pirate Bay-style universal Haven uploader, Filecoin Synapse seeder, and Arkiv OP L3 DataDAO tracker.",
     handles: ["haven.*", "upload", "seed", "all CIDs"],
     status: "built",

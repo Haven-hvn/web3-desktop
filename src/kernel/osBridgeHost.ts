@@ -6,6 +6,7 @@ import { CHAINS, makeGateKey, type HavenGateRef } from "./protocol";
 export const HAVEN_OS_BRIDGE_CHANNEL = "haven-os:v1" as const;
 
 const DEFAULT_ALLOWED_ORIGINS = new Set<string>([
+  "https://haven-os.pinme.dev",
   "https://haven.pinme.dev",
   "https://haven-tunes.pinme.dev",
   "https://haven-bay.pinme.dev",
@@ -13,6 +14,14 @@ const DEFAULT_ALLOWED_ORIGINS = new Set<string>([
   "https://redhaven.pinme.dev",
   "https://feetonfire.pinme.dev",
 ]);
+
+const VARIANT_TO_CHAIN_ID: Record<string, number> = {
+  EthMainnet: 1,
+  OptimismMainnet: 10,
+  BaseMainnet: 8453,
+  ArbitrumOne: 42161,
+  EthSepolia: 11155111,
+};
 
 export function isAllowedBridgeOrigin(origin: string): boolean {
   if (!origin || origin === "null") return false;
@@ -182,35 +191,78 @@ export class HavenOsBridgeHost {
     }
 
     if (method === "haven_getGateKey") {
-      const p = (params ?? {}) as { gateId?: string; epoch?: number };
+      const p = (params ?? {}) as {
+        gateId?: string;
+        chainId?: number;
+        chainVariant?: string;
+        tokenAddress?: string;
+        threshold?: string;
+        epoch?: number;
+      };
       const keys = this.deps.getUnlockedKeys();
-      const found = keys.find(
-        (k) =>
-          (k.gateKey === p.gateId || k.gateKey.toLowerCase() === p.gateId?.toLowerCase()) &&
-          (p.epoch == null || k.epoch === p.epoch),
-      );
+      const targetGateId = p.gateId?.toLowerCase();
+      const targetToken = p.tokenAddress?.toLowerCase();
+      const targetVariant =
+        p.chainVariant || (p.chainId != null ? CHAINS[Number(p.chainId)]?.aolVariant : undefined);
+      const found = keys.find((k) => {
+        if (p.epoch != null && k.epoch !== Number(p.epoch)) return false;
+        const variantGateId = `${k.chainVariant}:${k.tokenAddress.toLowerCase()}:${k.threshold}`.toLowerCase();
+        if (targetGateId) {
+          if (
+            k.gateKey.toLowerCase() === targetGateId ||
+            k.cacheKey.toLowerCase() === targetGateId ||
+            variantGateId === targetGateId
+          ) {
+            return true;
+          }
+        }
+        if (targetToken && targetVariant) {
+          const thresholdMatch = p.threshold == null || k.threshold === String(p.threshold);
+          return (
+            k.chainVariant === targetVariant &&
+            k.tokenAddress.toLowerCase() === targetToken &&
+            thresholdMatch
+          );
+        }
+        return false;
+      });
       if (!found) return null;
       const derived = await found.vetKey.deriveSymmetricKey("haven-aes-256-gcm", 32);
       return {
         gateId: found.gateKey,
         epoch: found.epoch,
         rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
+        vetKeyBase64: bytesToBase64(found.vetKey.serialize()),
+        chainVariant: found.chainVariant,
+        tokenAddress: found.tokenAddress,
+        threshold: found.threshold,
       };
     }
 
     if (method === "haven_unlockGate") {
       const p = (params ?? {}) as {
         gateId?: string;
-        chainId: number;
+        chainId?: number;
+        chainVariant?: string;
         tokenAddress: string;
         threshold: string;
         epoch?: number;
       };
-      const chainInfo = CHAINS[Number(p.chainId)];
+      const resolvedChainId =
+        p.chainId != null
+          ? Number(p.chainId)
+          : p.chainVariant
+            ? (VARIANT_TO_CHAIN_ID[p.chainVariant] ?? 8453)
+            : 8453;
+      const chainInfo = CHAINS[resolvedChainId];
+      const resolvedVariant =
+        (p.chainVariant as HavenGateRef["chainVariant"] | undefined) ??
+        chainInfo?.aolVariant ??
+        "BaseMainnet";
       const gateRef: HavenGateRef = {
         type: 3,
-        chainId: Number(p.chainId),
-        chainVariant: chainInfo?.aolVariant ?? "BaseMainnet",
+        chainId: resolvedChainId,
+        chainVariant: resolvedVariant,
         tokenAddress: p.tokenAddress.toLowerCase(),
         threshold: p.threshold || "1",
         epoch: p.epoch,
@@ -221,6 +273,10 @@ export class HavenOsBridgeHost {
         gateId: p.gateId || makeGateKey(gateRef),
         epoch: entry.epoch,
         rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
+        vetKeyBase64: bytesToBase64(entry.vetKey.serialize()),
+        chainVariant: entry.chainVariant,
+        tokenAddress: entry.tokenAddress,
+        threshold: entry.threshold,
       };
     }
 

@@ -53,7 +53,7 @@ export function AppContent({ window: win, app }: AppContentProps) {
         (win.launchParams?.forceMode !== "native" && mountCfg.mode === "iframe")));
 
   if (useIframe) {
-    const url = app.render.kind === "iframe" ? app.render.url : mountCfg!.url;
+    const url = mountCfg?.url || (app.render.kind === "iframe" ? app.render.url : "");
     return (
       <div className="app-iframe-wrap">
         <div className="app-iframe-fallback">

@@ -28,6 +28,7 @@ export interface HavenOsConfig {
   clippyGunRelays: string;
   appMounts: {
     "haven-media": AppMountConfig;
+    "haven-bay": AppMountConfig;
     fairhaven: AppMountConfig;
     redhaven: AppMountConfig;
     feetonfire: AppMountConfig;
@@ -69,12 +70,21 @@ export const DEFAULT_CONFIG: HavenOsConfig = {
   clippyAgentAddress: "0x90779a7582aafb91b9ad78e9f3a3cba88ed44042",
   clippyGunRelays: "http://localhost:8765/gun",
   appMounts: {
-    "haven-media": { mode: "iframe", url: "/apps/haven-dapp/index.html" },
-    fairhaven: { mode: "native", url: "/apps/fairhaven/" },
-    redhaven: { mode: "native", url: "/apps/redhaven/" },
-    feetonfire: { mode: "native", url: "/apps/feetonfire/index.html" },
+    "haven-media": { mode: "iframe", url: "https://haven-tunes.pinme.dev/" },
+    "haven-bay": { mode: "iframe", url: "https://haven-bay.pinme.dev/" },
+    fairhaven: { mode: "iframe", url: "https://fairhaven.pinme.dev/" },
+    redhaven: { mode: "iframe", url: "https://redhaven.pinme.dev/" },
+    feetonfire: { mode: "iframe", url: "https://feetonfire.pinme.dev/" },
   },
 };
+
+const LEGACY_LOCAL_MOUNT_URLS = new Set<string>([
+  "/apps/haven-dapp/index.html",
+  "/apps/haven-bay/index.html",
+  "/apps/fairhaven/",
+  "/apps/redhaven/",
+  "/apps/feetonfire/index.html",
+]);
 
 const STORAGE_KEY = "haven-os:config:v1";
 
@@ -83,13 +93,25 @@ export function loadConfig(): HavenOsConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_CONFIG;
     const parsed = JSON.parse(raw) as Partial<HavenOsConfig>;
+    const mergedMounts: HavenOsConfig["appMounts"] = {
+      ...DEFAULT_CONFIG.appMounts,
+      ...(parsed.appMounts ?? {}),
+    };
+    // Migrate stale local /apps/... mount URLs to canonical PinMe URLs on remote origins
+    const isLocalOrigin =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    if (!isLocalOrigin) {
+      for (const key of Object.keys(DEFAULT_CONFIG.appMounts) as Array<keyof HavenOsConfig["appMounts"]>) {
+        if (LEGACY_LOCAL_MOUNT_URLS.has(mergedMounts[key].url)) {
+          mergedMounts[key] = { ...mergedMounts[key], url: DEFAULT_CONFIG.appMounts[key].url };
+        }
+      }
+    }
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
-      appMounts: {
-        ...DEFAULT_CONFIG.appMounts,
-        ...(parsed.appMounts ?? {}),
-      },
+      appMounts: mergedMounts,
     };
   } catch {
     return DEFAULT_CONFIG;

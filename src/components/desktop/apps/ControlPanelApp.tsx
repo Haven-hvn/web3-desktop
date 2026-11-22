@@ -266,24 +266,26 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(
                 [
-                  ["haven-media", "🎵 Haven Media (haven-dapp)"],
-                  ["fairhaven", "🍀 Fairhaven (4chan)"],
-                  ["redhaven", "👽 Redhaven (Reddit)"],
-                  ["feetonfire", "🔥 FeetOnFire (StepMania DDR)"],
+                  ["haven-media", "🎵 Haven Tunes 2000 (haven-tunes)", true],
+                  ["haven-bay", "🏴‍☠️ The Haven Bay (haven-bay)", false],
+                  ["fairhaven", "🍀 Fairhaven (4chan)", true],
+                  ["redhaven", "👽 Redhaven (Reddit)", true],
+                  ["feetonfire", "🔥 FeetOnFire (StepMania DDR)", true],
                 ] as const
-              ).map(([key, label]) => (
+              ).map(([key, label, hasNative]) => (
                 <div
                   key={key}
                   className="w98-panel"
                   style={{ padding: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
                 >
-                  <strong style={{ minWidth: 185 }}>{label}</strong>
+                  <strong style={{ minWidth: 195 }}>{label}</strong>
                   <select
                     className="w98-field"
-                    value={draft.appMounts[key].mode}
+                    value={hasNative ? draft.appMounts[key].mode : "iframe"}
+                    disabled={!hasNative}
                     onChange={(e) => setMount(key, { mode: e.target.value as AppRuntimeMode })}
                   >
-                    <option value="native">Native OS Mode (Shared Kernel)</option>
+                    {hasNative && <option value="native">Native OS Mode (Shared Kernel)</option>}
                     <option value="iframe">Embedded Bundle (iframe)</option>
                   </select>
                   <input

@@ -21,6 +21,17 @@ export default function FeetOnFireApp({ window: win }: { window: WindowInstance 
   const mountUrl = config.appMounts.feetonfire.url;
 
   useEffect(() => {
+    // External cross-origin URLs (e.g. https://feetonfire.pinme.dev/) cannot be
+    // pre-fetched due to CORS, so mount them directly in the iframe.
+    try {
+      const resolved = new URL(mountUrl, window.location.href);
+      if (resolved.origin !== window.location.origin) {
+        setBundleAvailable(true);
+        return;
+      }
+    } catch {
+      // fall through to same-origin probe
+    }
     fetch(mountUrl)
       .then(async (res) => {
         if (!res.ok) return setBundleAvailable(false);

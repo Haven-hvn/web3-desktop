@@ -1,0 +1,753 @@
+/* Haven OS 98 — Desktop Shell, Boot Screens, Window Frames & Apps */
+
+.os-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ---------- Boot Menu ---------- */
+
+.boot-menu {
+  height: 100%;
+  background: #000;
+  color: #c8d0d8;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.boot-ascii {
+  margin: 0;
+  font-size: clamp(9px, 1.4vw, 13px);
+  line-height: 1.15;
+  color: #5eead4;
+  text-align: left;
+  white-space: pre;
+}
+
+.boot-title {
+  font-size: clamp(14px, 2.2vw, 20px);
+  font-weight: bold;
+  text-align: center;
+  border-bottom: 2px solid #c8d0d8;
+  padding-bottom: 6px;
+  margin: 0;
+  max-width: min(640px, 92vw);
+}
+
+.boot-meta {
+  font-size: 12px;
+  color: #8b95a5;
+  text-align: center;
+  max-width: 580px;
+}
+
+.boot-divider {
+  width: min(460px, 86vw);
+  border-top: 1px solid #444;
+  border-bottom: 1px solid #444;
+  height: 3px;
+}
+
+.boot-option {
+  background: none;
+  border: none;
+  color: #d5dce4;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 5px 12px;
+  cursor: pointer;
+  text-align: left;
+  width: min(460px, 86vw);
+}
+
+.boot-option:hover,
+.boot-option:focus-visible {
+  background: #d5dce4;
+  color: #000;
+  outline: none;
+}
+
+/* ---------- Splash & Login ---------- */
+
+.boot-splash {
+  height: 100%;
+  background: radial-gradient(circle at 50% 35%, #164e63 0%, #0b2239 55%, #061220 100%);
+  color: #f0f9ff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  cursor: pointer;
+  padding: 24px;
+}
+
+.splash-emblem {
+  font-size: 56px;
+  filter: drop-shadow(0 6px 20px rgba(94, 234, 212, 0.35));
+}
+
+.splash-title {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.splash-sub {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 0;
+  text-align: center;
+}
+
+.splash-bar {
+  width: min(320px, 80vw);
+  height: 14px;
+  border: 2px solid #94a3b8;
+  background: #020617;
+  overflow: hidden;
+  padding: 2px;
+}
+
+.splash-bar-fill {
+  height: 100%;
+  width: 45%;
+  background: linear-gradient(90deg, #0ea5e9, #5eead4);
+  animation: splash-slide 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes splash-slide {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+.login-screen {
+  height: 100%;
+  background: radial-gradient(circle at 30% 20%, #134e4a 0%, #0b2538 55%, #07131e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.login-window {
+  position: relative;
+  width: min(500px, 94vw);
+}
+
+.login-body {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-key-icon {
+  font-size: 38px;
+  line-height: 1;
+}
+
+.login-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Shutdown & BSOD ---------- */
+
+.shutdown-screen {
+  height: 100%;
+  background: #0a0a0a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.shutdown-box {
+  text-align: center;
+  color: #ffb000;
+}
+
+.shutdown-message {
+  font-family: "Courier New", monospace;
+  font-size: clamp(18px, 3vw, 26px);
+  font-weight: bold;
+  line-height: 1.4;
+}
+
+.bsod {
+  height: 100%;
+  background: #0000aa;
+  color: #fff;
+  font-family: "Courier New", monospace;
+  padding: 8vh 6vw;
+  cursor: pointer;
+}
+
+.bsod-header {
+  background: #c0c0c0;
+  color: #0000aa;
+  display: inline-block;
+  padding: 1px 12px;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+/* ---------- Workspace ---------- */
+
+.workspace-layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--theme-background);
+}
+
+.workspace-desktop-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-desktop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-image:
+    radial-gradient(640px 320px at 85% 15%, rgba(255, 255, 255, 0.06), transparent),
+    radial-gradient(500px 260px at 85% 88%, rgba(217, 93, 57, 0.08), transparent);
+}
+
+.desktop-watermark {
+  position: absolute;
+  right: 264px;
+  bottom: 14px;
+  text-align: right;
+  color: var(--theme-on-background);
+  opacity: 0.72;
+  pointer-events: none;
+  font-size: 11px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.75);
+  line-height: 1.45;
+  z-index: 0;
+}
+
+.desktop-watermark strong {
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+.marquee-rectangle {
+  position: absolute;
+  border: 1px dotted var(--theme-focus-ring);
+  background: var(--theme-selection);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ---------- Taskbar & Start Menu ---------- */
+
+.taskbar {
+  z-index: 10000;
+  gap: 5px;
+}
+
+.start-button {
+  font-weight: bold;
+}
+
+.taskbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 0;
+  border-left: 1px solid var(--theme-border-dark);
+  border-right: 1px solid var(--theme-border-light);
+}
+
+.taskbar-quicklaunch {
+  display: flex;
+  gap: 3px;
+}
+
+.taskbar-tasks {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.task-button {
+  max-width: 175px;
+  overflow: hidden;
+}
+
+.task-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray {
+  margin-left: auto;
+}
+
+.tray-button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.start-menu {
+  position: fixed;
+  bottom: var(--taskbar-height);
+  left: 2px;
+  min-width: 290px;
+  display: flex;
+  z-index: 10001;
+}
+
+.start-menu-sidebar {
+  width: 28px;
+  background: linear-gradient(180deg, var(--theme-primary), var(--theme-primary-variant));
+  color: var(--theme-on-primary);
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 10px;
+  flex: none;
+}
+
+.sideways-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-style: italic;
+}
+
+.sideways-text strong {
+  font-size: 17px;
+}
+
+.sideways-text small {
+  font-size: 10px;
+}
+
+.start-menu-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  min-width: 245px;
+}
+
+.start-menu-category {
+  position: relative;
+}
+
+.start-submenu {
+  position: absolute;
+  left: calc(100% - 2px);
+  bottom: 0;
+  min-width: 225px;
+  z-index: 10002;
+}
+
+@media (max-width: 640px) {
+  .start-submenu {
+    position: static;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* ---------- Window Frames ---------- */
+
+.window-frame {
+  min-width: 240px;
+  min-height: 150px;
+}
+
+.window-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+
+.resize-n { top: -3px; left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.resize-s { bottom: -3px; left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.resize-e { right: -3px; top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+.resize-w { left: -3px; top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+.resize-ne { top: -3px; right: -3px; width: 10px; height: 10px; cursor: nesw-resize; }
+.resize-nw { top: -3px; left: -3px; width: 10px; height: 10px; cursor: nwse-resize; }
+.resize-se { bottom: -3px; right: -3px; width: 10px; height: 10px; cursor: nwse-resize; }
+.resize-sw { bottom: -3px; left: -3px; width: 10px; height: 10px; cursor: nesw-resize; }
+
+.app-iframe-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-iframe-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border-dark);
+}
+
+.app-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #0b0e14;
+}
+
+/* ---------- Shared App Layout Helpers ---------- */
+
+.app-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-header-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--theme-border-dark);
+  background: var(--theme-surface);
+  flex: none;
+}
+
+.app-split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-sidebar {
+  width: 215px;
+  flex: none;
+  border-right: 1px solid var(--theme-border-dark);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--theme-surface);
+}
+
+@media (max-width: 720px) {
+  .app-split {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    width: 100%;
+    max-height: 170px;
+    border-right: none;
+    border-bottom: 1px solid var(--theme-border-dark);
+  }
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--theme-surface-variant);
+}
+
+.app-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-top: 1px solid var(--theme-border-dark);
+  background: var(--theme-surface);
+  color: var(--theme-on-surface-variant);
+  flex: none;
+}
+
+.sidebar-section-title {
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px 3px;
+  opacity: 0.7;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  color: var(--theme-on-surface);
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar-item:hover {
+  background: var(--theme-button-hover);
+}
+
+.sidebar-item[data-active="true"] {
+  background: var(--theme-primary);
+  color: var(--theme-on-primary);
+  font-weight: bold;
+}
+
+.frost-box {
+  border: 1px dashed var(--theme-border-dark);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(128, 128, 128, 0.08),
+    rgba(128, 128, 128, 0.08) 8px,
+    rgba(128, 128, 128, 0.16) 8px,
+    rgba(128, 128, 128, 0.16) 16px
+  );
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--theme-border-dark);
+  padding: 5px 7px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  background: var(--theme-surface);
+  position: sticky;
+  top: 0;
+  font-size: 11px;
+  z-index: 1;
+}
+
+.data-table tr[data-selected="true"] {
+  background: var(--theme-selection);
+}
+
+.data-table tbody tr:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+/* ---------- Fairhaven (4chan) specific ---------- */
+
+.fh-board-bg {
+  background: var(--theme-surface-variant);
+}
+
+.fh-thread-card {
+  border: 1px solid var(--theme-border-dark);
+  background: var(--theme-surface);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.fh-reply-card {
+  border-left: 3px solid var(--theme-primary);
+  background: var(--theme-surface);
+  padding: 6px 10px;
+  margin: 5px 0 5px 18px;
+}
+
+.fh-meta {
+  font-size: 11px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.fh-subject {
+  font-weight: bold;
+  color: var(--theme-primary);
+}
+
+/* ---------- Redhaven (Reddit) specific ---------- */
+
+.rh-row {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  border-bottom: 1px solid var(--theme-border-dark);
+  align-items: flex-start;
+}
+
+.rh-vote-col {
+  width: 44px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rh-vote-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--theme-on-surface-variant);
+  padding: 1px 4px;
+}
+
+.rh-vote-btn[data-active="up"] {
+  color: #ff4500;
+  font-weight: bold;
+}
+
+.rh-vote-btn[data-active="down"] {
+  color: #5f99cf;
+  font-weight: bold;
+}
+
+.rh-score {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.rh-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--theme-info);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.rh-title:hover {
+  text-decoration: underline;
+}
+
+.rh-tagline {
+  font-size: 11px;
+  opacity: 0.78;
+  margin-top: 2px;
+}
+
+.rh-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  font-size: 11px;
+}
+
+/* ---------- Haven Tunes / Media ---------- */
+
+.tunes-player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, var(--theme-surface), var(--theme-button-face));
+  border-bottom: 1px solid var(--theme-border-dark);
+  flex-wrap: wrap;
+}
+
+.tunes-lcd {
+  flex: 1;
+  min-width: 210px;
+  background: #dce8c8;
+  color: #16240c;
+  border: 1px solid #6b7b56;
+  box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.25);
+  padding: 5px 10px;
+  text-align: center;
+  font-family: ui-monospace, monospace;
+}
+
+/* ---------- Tabs ---------- */
+
+.w98-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--theme-border-dark);
+  background: var(--theme-surface);
+  flex-wrap: wrap;
+}
+
+.w98-tab {
+  padding: 4px 10px;
+  background: var(--theme-button-face);
+  color: var(--theme-button-text);
+  border: 1px solid var(--theme-border-dark);
+  border-bottom: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.w98-tab[data-active="true"] {
+  background: var(--theme-surface-variant);
+  font-weight: bold;
+  position: relative;
+  top: 1px;
+  padding-bottom: 5px;
+}

@@ -1,0 +1,107 @@
+name: Deploy to PinMe
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout web3-desktop
+        uses: actions/checkout@v4
+        with:
+          path: web3-desktop
+
+      - name: Checkout Haven-AOL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/haven-aol
+          path: haven-aol
+
+      - name: Check PinMe AppKey
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.PINME_APPKEY }}" ]; then
+            echo "🚨 PINME_APPKEY not found! Please follow these steps:"
+            echo ""
+            echo "1. Install PinMe CLI: npm install -g pinme"
+            echo "2. Login: pinme login"
+            echo "3. Show AppKey: pinme show-appkey  (or pinme appkey)"
+            echo "4. Copy the AppKey"
+            echo "5. Go to https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "6. Click 'New repository secret'"
+            echo "7. Name: PINME_APPKEY"
+            echo "8. Value: Your AppKey from step 3"
+            echo "9. Click 'Add secret'"
+            echo ""
+            echo "Docs: https://github.com/glitternetwork/pinme"
+            echo "Once done, re-run this workflow."
+            exit 1
+          fi
+          echo "✅ PINME_APPKEY is set"
+
+      - name: Validate package manifest
+        working-directory: web3-desktop
+        shell: bash
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: web3-desktop
+        run: npm install --legacy-peer-deps
+
+      - name: Build Vite app
+        working-directory: web3-desktop
+        run: |
+          echo "Building Haven OS Web3 Desktop..."
+          npm run build
+
+      - name: Verify build output
+        working-directory: web3-desktop
+        run: |
+          if [ ! -d "./dist" ]; then
+            echo "❌ Build failed: ./dist directory not found"
+            exit 1
+          fi
+          if [ ! -f "./dist/index.html" ]; then
+            echo "❌ Build failed: ./dist/index.html not found"
+            exit 1
+          fi
+          echo "✅ Build successful: ./dist directory exists"
+          ls -la ./dist
+          echo "--- dist/index.html head ---"
+          head -20 ./dist/index.html
+
+      - name: Setup PinMe CLI
+        run: |
+          npx pinme@2.0.12 --version
+          npx pinme@2.0.12 --help | head -20
+
+      - name: Authenticate PinMe
+        env:
+          PINME_APPKEY: ${{ secrets.PINME_APPKEY }}
+        run: |
+          npx pinme@2.0.12 set-appkey "$PINME_APPKEY"
+
+      - name: Deploy to PinMe (IPFS)
+        working-directory: web3-desktop
+        env:
+          PINME_DOMAIN: ${{ vars.PINME_DOMAIN || secrets.PINME_DOMAIN }}
+        run: |
+          echo "Uploading ./dist to IPFS via PinMe..."
+          if [ -n "$PINME_DOMAIN" ]; then
+            echo "Binding domain: $PINME_DOMAIN"
+            npx pinme@2.0.12 upload ./dist --domain "$PINME_DOMAIN"
+          else
+            npx pinme@2.0.12 upload ./dist
+          fi
+          echo "✅ PinMe upload completed"
+          echo "Check upload history: npx pinme@2.0.12 list -l 5"

@@ -25,6 +25,7 @@ const cacheDir = process.env.HOME
   : "node_modules/.vite";
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   cacheDir,
   define: {

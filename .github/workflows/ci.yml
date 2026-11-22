@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout web3-desktop
+        uses: actions/checkout@v4
+        with:
+          path: web3-desktop
+
+      - name: Checkout Haven-AOL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/haven-aol
+          path: haven-aol
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: web3-desktop
+        run: npm install --legacy-peer-deps
+
+      - name: Run TypeScript type check
+        working-directory: web3-desktop
+        run: npm run typecheck
+
+      - name: Build Vite application
+        working-directory: web3-desktop
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web3-desktop-dist
+          path: web3-desktop/dist
+          retention-days: 7

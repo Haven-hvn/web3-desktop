@@ -62,6 +62,7 @@ jobs:
         working-directory: web3-desktop
         env:
           VITE_WALLETCONNECT_PROJECT_ID: ${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}
+          VITE_ARKIV_API_KEY: ${{ secrets.ARKIV_API_KEY }}
         run: |
           echo "Building Haven OS Web3 Desktop..."
           npm run build

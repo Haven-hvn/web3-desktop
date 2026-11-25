@@ -51,7 +51,7 @@ export const ARKIV_PRESETS = [
 export const DEFAULT_CONFIG: HavenOsConfig = {
   arkivNetworkName: "Rabdi",
   arkivRpcUrl: "https://rpc.rabdi.db-chain.testnet.arkiv.network",
-  arkivApiKey: "",
+  arkivApiKey: (import.meta.env.VITE_ARKIV_API_KEY as string | undefined) ?? "",
   icpHost: "https://icp-api.io",
   havenAolCanisterId: "3gzy3-kaaaa-aaaan-q6y6q-cai",
   havenAolVerifyingContract: "0x0000000000000000000000000000000000000000",

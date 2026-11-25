@@ -5,7 +5,6 @@ import { CHAINS, currentEpochNow, shortAddress } from "../../../kernel/protocol"
 export default function WalletApp() {
   const {
     wallet,
-    discoveredWallets,
     connectWallet,
     setWatchAddress,
     disconnectWallet,
@@ -21,11 +20,11 @@ export default function WalletApp() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const handleConnect = async (idx: number) => {
+  const handleConnect = async () => {
     setMsg(null);
     setBusy(true);
     try {
-      await connectWallet(discoveredWallets[idx]);
+      await connectWallet();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : String(err));
     } finally {
@@ -68,25 +67,19 @@ export default function WalletApp() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {discoveredWallets.length > 0 ? (
-                  discoveredWallets.map((w, idx) => (
-                    <button
-                      key={w.id}
-                      type="button"
-                      className="w98-button w98-button-primary"
-                      disabled={busy}
-                      onClick={() => void handleConnect(idx)}
-                    >
-                      🦊 Connect {w.name}
-                    </button>
-                  ))
-                ) : (
-                  <div style={{ fontSize: 11, opacity: 0.8 }}>
-                    No EIP-1193/EIP-6963 browser wallet extension detected. Open Haven OS in a
-                    wallet-enabled browser (MetaMask, Rabby, Frame) or enter a watch address below.
-                  </div>
-                )}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <appkit-button />
+                <button
+                  type="button"
+                  className="w98-button w98-button-primary"
+                  disabled={busy}
+                  onClick={() => void handleConnect()}
+                >
+                  Connect Wallet (QR)
+                </button>
+                <span style={{ fontSize: 11, opacity: 0.8 }}>
+                  WalletConnect via Reown — injected wallets work through Reown too.
+                </span>
               </div>
 
               <div style={{ display: "flex", gap: 6 }}>

@@ -60,6 +60,8 @@ jobs:
 
       - name: Build Vite app
         working-directory: web3-desktop
+        env:
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}
         run: |
           echo "Building Haven OS Web3 Desktop..."
           npm run build

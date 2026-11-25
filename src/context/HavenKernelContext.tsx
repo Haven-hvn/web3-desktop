@@ -23,13 +23,9 @@ import {
   type ArkivProbeResult,
 } from "../kernel/arkiv";
 import { DEFAULT_CONFIG, loadConfig, saveConfig, type HavenOsConfig } from "../kernel/config";
-import {
-  connectEip1193Wallet,
-  discoverInjectedWallets,
-  inspectGateToken,
-  type DiscoveredWallet,
-  type Eip1193Provider,
-} from "../kernel/evm";
+import { inspectGateToken, type DiscoveredWallet, type Eip1193Provider } from "../kernel/evm";
+import { useAccount, useDisconnect } from "wagmi";
+import { modal } from "../lib/reown";
 import {
   buildGateDirectory,
   currentEpochNow,
@@ -100,7 +96,8 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   const [scanStatus, setScanStatus] = useState("Ready");
   const [scanError, setScanError] = useState<string | null>(null);
 
-  const [discoveredWallets, setDiscoveredWallets] = useState<DiscoveredWallet[]>([]);
+  const { address: wagmiAddress, chainId: wagmiChainId, isConnected: wagmiConnected, connector } = useAccount();
+  const { disconnect } = useDisconnect();
   const [wallet, setWallet] = useState<WalletState>({
     address: null,
     chainId: null,
@@ -108,6 +105,8 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     watchOnly: false,
     provider: null,
   });
+  // Reown is the single wallet source; keep the shape for bridge/consumers.
+  const discoveredWallets: DiscoveredWallet[] = [];
 
   const [unlockedMap, setUnlockedMap] = useState<Record<string, UnlockedEpochEntry>>({});
   const [unlockingGateKey, setUnlockingGateKey] = useState<string | null>(null);
@@ -130,12 +129,34 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   const configRef = useRef(config);
   configRef.current = config;
 
-  // Discover EIP-6963 / injected wallets on boot
+  // Sync wagmi/Reown account into wallet state (single source; watch-only wins).
   useEffect(() => {
-    return discoverInjectedWallets((w) => {
-      setDiscoveredWallets((prev) => (prev.some((p) => p.id === w.id) ? prev : [...prev, w]));
-    });
-  }, []);
+    let cancelled = false;
+    if (wagmiConnected && wagmiAddress && connector) {
+      connector
+        .getProvider()
+        .then((provider) => {
+          if (cancelled) return;
+          setWallet((prev) =>
+            prev.watchOnly
+              ? prev
+              : {
+                  address: wagmiAddress,
+                  chainId: wagmiChainId ?? 1,
+                  walletName: connector.name ?? "WalletConnect",
+                  watchOnly: false,
+                  provider: provider as unknown as Eip1193Provider,
+                },
+          );
+        })
+        .catch(() => undefined);
+    } else if (!wagmiConnected) {
+      setWallet((prev) => (prev.watchOnly ? prev : { address: null, chainId: null, walletName: null, watchOnly: false, provider: null }));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [wagmiConnected, wagmiAddress, wagmiChainId, connector]);
 
   const updateConfig = useCallback((patch: Partial<HavenOsConfig>) => {
     setConfig((prev) => {
@@ -190,25 +211,10 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     setScanStatus("Cache cleared");
   }, []);
 
-  const connectWallet = useCallback(
-    async (chosen?: DiscoveredWallet) => {
-      const target = chosen ?? discoveredWallets[0];
-      if (!target) {
-        throw new Error(
-          "No injected EVM wallet detected in this browser. Install MetaMask/Rabby or enter a Watch Address.",
-        );
-      }
-      const { address, chainId } = await connectEip1193Wallet(target.provider);
-      setWallet({
-        address,
-        chainId,
-        walletName: target.name,
-        watchOnly: false,
-        provider: target.provider,
-      });
-    },
-    [discoveredWallets],
-  );
+  const connectWallet = useCallback(async () => {
+    if (!modal) throw new Error("WalletConnect is not configured (set VITE_WALLETCONNECT_PROJECT_ID).");
+    await modal.open();
+  }, []);
 
   const setWatchAddress = useCallback((address: string) => {
     const clean = address.trim();
@@ -225,14 +231,8 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnectWallet = useCallback(() => {
-    setWallet({
-      address: null,
-      chainId: null,
-      walletName: null,
-      watchOnly: false,
-      provider: null,
-    });
-  }, []);
+    disconnect();
+  }, [disconnect]);
 
   const findUnlockedKey = useCallback(
     (gate?: HavenGateRef, epoch?: number): UnlockedEpochEntry | undefined => {

@@ -53,7 +53,7 @@ export const DEFAULT_CONFIG: HavenOsConfig = {
   arkivRpcUrl: "https://rpc.rabdi.db-chain.testnet.arkiv.network",
   arkivApiKey: "",
   icpHost: "https://icp-api.io",
-  havenAolCanisterId: "gny6k-fqaaa-aaaab-ag3ra-cai",
+  havenAolCanisterId: "3gzy3-kaaaa-aaaan-q6y6q-cai",
   havenAolVerifyingContract: "0x0000000000000000000000000000000000000000",
   havenAolFetchRootKey: false,
   eip712ChainId: 1,

@@ -7,7 +7,7 @@ A Windows 98-inspired Web3 Desktop aggregating the Haven application-layer (L7) 
 Every app on the desktop reads the **same public on-chain data** through one shared **Haven OS Kernel**:
 
 - **Metadata & Discovery:** Arkiv OP L3 (`0x44…0044`), defaulting to **Rabdi** (`https://rpc.rabdi.db-chain.testnet.arkiv.network`) and reconfigurable at runtime via **Control Panel**.
-- **Access Control:** Any EVM L1/L2 token or NFT gate (Ethereum, Base, Arbitrum, Optimism, Sepolia) verified by the **Haven-AOL ICP canister** (`gny6k-fqaaa-aaaab-ag3ra-cai`).
+- **Access Control:** Any EVM L1/L2 token or NFT gate (Ethereum, Base, Arbitrum, Optimism, Sepolia) verified by the **Haven-AOL ICP canister** (`3gzy3-kaaaa-aaaan-q6y6q-cai`).
 - **Shared OS VetKD Keyring:** Sign EIP-712 `GateRequestV3` **once per gate per 30-day epoch** — unlocked keys are immediately shared across every open window on the desktop.
 - **Encrypted Media Storage:** Filecoin Onchain Cloud (`piece` CommP) & IPFS (`fcid`).
 

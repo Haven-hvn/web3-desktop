@@ -14,6 +14,8 @@ export interface HavenOsConfig {
   ipfsGateway: string;
   synapseBaseUrl: string;
   synapseApiKey: string;
+  filecoinChainId: 314159 | 314;
+  synapseEnableCdn: boolean;
   walletConnectProjectId: string;
   maxArkivRecords: number;
   showDebugOverlay: boolean;
@@ -82,6 +84,8 @@ export const DEFAULT_CONFIG: HavenOsConfig = {
   ipfsGateway: "https://w3s.link",
   synapseBaseUrl: "https://api.synapse.storage",
   synapseApiKey: "",
+  filecoinChainId: 314159,
+  synapseEnableCdn: true,
   walletConnectProjectId: "",
   maxArkivRecords: 200,
   showDebugOverlay: false,

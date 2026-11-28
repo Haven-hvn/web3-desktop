@@ -172,6 +172,36 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
                   onChange={(e) => setDraft({ ...draft, synapseBaseUrl: e.target.value })}
                 />
 
+                <label htmlFor="cfg-fil-net">Filecoin Network</label>
+                <select
+                  id="cfg-fil-net"
+                  className="w98-field"
+                  value={draft.filecoinChainId}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      filecoinChainId: Number(e.target.value) === 314 ? 314 : 314159,
+                    })
+                  }
+                >
+                  <option value={314159}>Filecoin Calibration Testnet (314159)</option>
+                  <option value={314}>Filecoin Mainnet (314)</option>
+                </select>
+
+                <label htmlFor="cfg-fil-cdn">FilBeam CDN</label>
+                <label
+                  htmlFor="cfg-fil-cdn"
+                  style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                >
+                  <input
+                    id="cfg-fil-cdn"
+                    type="checkbox"
+                    checked={draft.synapseEnableCdn}
+                    onChange={(e) => setDraft({ ...draft, synapseEnableCdn: e.target.checked })}
+                  />
+                  Enable FilBeam CDN (<code>withCDN: true</code>) for Synapse retrieval
+                </label>
+
                 <label htmlFor="cfg-ipfs">IPFS Gateway</label>
                 <input
                   id="cfg-ipfs"

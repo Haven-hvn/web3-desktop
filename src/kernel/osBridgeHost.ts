@@ -104,6 +104,8 @@ function exportConfig(cfg: HavenOsConfig) {
     ipfsGateway: cfg.ipfsGateway,
     havenAolCanisterId: cfg.havenAolCanisterId,
     icpHost: cfg.icpHost,
+    filecoinChainId: cfg.filecoinChainId,
+    synapseEnableCdn: cfg.synapseEnableCdn,
   };
 }
 

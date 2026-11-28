@@ -247,8 +247,15 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     if (wagmiConnected && wagmiAddress && connector) {
-      connector
-        .getProvider()
+      const resolveProvider = (): Promise<unknown> => {
+        if (typeof connector.getProvider === "function") {
+          return Promise.resolve().then(() => connector.getProvider());
+        }
+        const injected = (window as unknown as { ethereum?: unknown }).ethereum ?? null;
+        return Promise.resolve(injected);
+      };
+
+      resolveProvider()
         .then((provider) => {
           if (cancelled) return;
           setWallet((prev) =>
@@ -259,11 +266,24 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
                   chainId: wagmiChainId ?? 1,
                   walletName: connector.name ?? "WalletConnect",
                   watchOnly: false,
-                  provider: provider as unknown as Eip1193Provider,
+                  provider: (provider as unknown as Eip1193Provider) ?? null,
                 },
           );
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (cancelled) return;
+          setWallet((prev) =>
+            prev.watchOnly
+              ? prev
+              : {
+                  address: wagmiAddress,
+                  chainId: wagmiChainId ?? 1,
+                  walletName: connector.name ?? "WalletConnect",
+                  watchOnly: false,
+                  provider: null,
+                },
+          );
+        });
     } else if (!wagmiConnected) {
       setWallet((prev) => (prev.watchOnly ? prev : { address: null, chainId: null, walletName: null, watchOnly: false, provider: null }));
     }

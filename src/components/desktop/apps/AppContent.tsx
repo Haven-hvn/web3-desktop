@@ -9,9 +9,10 @@ import { ErrorBoundary } from "../../ErrorBoundary";
  * Retries a dynamic chunk import once on transient IPFS/PinMe gateway glitches
  * before letting the window-level ErrorBoundary handle it cleanly.
  */
-function lazyWithRetry<P>(
-  loader: () => Promise<{ default: ComponentType<P> }>,
-): ComponentType<P> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazyWithRetry<T extends ComponentType<any>>(
+  loader: () => Promise<{ default: T }>,
+) {
   return lazy(async () => {
     try {
       return await loader();

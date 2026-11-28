@@ -17,8 +17,24 @@ const EPHEMERAL_KEY_STORAGE = "haven-clippy:ephemeral-private-key";
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const PRESENCE_STALE_MS = 35_000;
 const SLIDING_WINDOW_MINUTES = 60;
+const JOIN_POLL_INTERVAL_MS = 2_000;
+const JOIN_POLL_MAX_MS = 20_000;
+const POST_MEMBER_SETTLE_BUFFER_MS = 900;
+const READY_AFTER_STREAM_START_MS = 1_400;
 const PRIVATE_KEY_RE = /^0x[0-9a-fA-F]{64}$/;
 const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Reuse a single XMTP Client per (env, address) across ClippyEngine restarts.
+ * Creating a second Client for the same ephemeral account in the same origin
+ * fails with OPFS `NoModificationAllowedError` (`createSyncAccessHandle`)
+ * because the first worker still holds the SQLite file handle.
+ */
+const sharedXmtpClients = new Map<string, Promise<Client>>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 export type ClippyConnectionStatus =
   | "idle"
@@ -136,10 +152,6 @@ function normalizeAgentAddress(raw: string): string {
   return ETH_ADDRESS_RE.test(trimmed) ? trimmed : DEFAULT_CLIPPY_AGENT_ADDRESS;
 }
 
-function currentEpoch(windowMinutes = SLIDING_WINDOW_MINUTES): number {
-  return Math.floor(Date.now() / (windowMinutes * 60_000));
-}
-
 export class ClippyEngine {
   private options: ClippyEngineOptions;
   private listeners = new Set<(state: ClippyEngineState) => void>();
@@ -241,11 +253,20 @@ export class ClippyEngine {
         },
       };
 
-      const clientOptions: NetworkOptions &
-        DeviceSyncOptions &
-        StorageOptions &
-        OtherOptions = { env: this.options.xmtpEnv };
-      const client = await Client.create(signer, clientOptions);
+      const clientCacheKey = `${this.options.xmtpEnv}:${myAddress}`;
+      let clientPromise = sharedXmtpClients.get(clientCacheKey);
+      if (!clientPromise) {
+        const clientOptions: NetworkOptions &
+          DeviceSyncOptions &
+          StorageOptions &
+          OtherOptions = { env: this.options.xmtpEnv };
+        clientPromise = Client.create(signer, clientOptions).catch((err) => {
+          sharedXmtpClients.delete(clientCacheKey);
+          throw err;
+        });
+        sharedXmtpClients.set(clientCacheKey, clientPromise);
+      }
+      const client = await clientPromise;
       if (this.destroyed) return;
 
       this.client = client;
@@ -325,6 +346,12 @@ export class ClippyEngine {
     };
 
     publishHeartbeat();
+    // Join burst: quick re-writes so peers and the shoutbox leader see us
+    // within ~1-3s instead of waiting for the 10s heartbeat (matches shoutbox).
+    for (const delay of [1_000, 3_000]) {
+      const burstTimer = window.setTimeout(publishHeartbeat, delay);
+      this.timers.push(burstTimer);
+    }
     const hbTimer = window.setInterval(publishHeartbeat, HEARTBEAT_INTERVAL_MS);
     this.timers.push(hbTimer);
 
@@ -384,17 +411,27 @@ export class ClippyEngine {
       if (this.destroyed || !data || !data.groupId) return;
       const record: GroupWindowRecord = {
         groupId: String(data.groupId),
-        epoch: Number(data.epoch ?? currentEpoch()),
+        epoch: Number(data.epoch ?? 1),
         createdBy: String(data.createdBy ?? ""),
         createdAt: Number(data.createdAt ?? Date.now()),
         expiresAt: Number(data.expiresAt ?? Date.now() + SLIDING_WINDOW_MINUTES * 60_000),
         windowMinutes: Number(data.windowMinutes ?? SLIDING_WINDOW_MINUTES),
       };
       if (record.expiresAt <= Date.now()) return;
+      if (this.activeWindow) {
+        // Follow shoutbox conflict resolution: higher epoch wins; same epoch lowest groupId wins
+        if (record.epoch < this.activeWindow.epoch) return;
+        if (
+          record.epoch === this.activeWindow.epoch &&
+          record.groupId > this.activeWindow.groupId
+        ) {
+          return;
+        }
+      }
       this.activeWindow = record;
 
       if (!this.activeGroup || this.activeGroup.id !== record.groupId) {
-        void this.joinExistingGroup(record.groupId, roomKey);
+        void this.joinExistingGroup(record, roomKey);
       }
     });
 
@@ -444,39 +481,49 @@ export class ClippyEngine {
     });
   }
 
-  private async joinExistingGroup(groupId: string, roomKey: string): Promise<void> {
+  private isGroupOrphaned(record: GroupWindowRecord): boolean {
+    if (!record.createdBy) return false;
+    const creator = this.presenceMap.get(record.createdBy);
+    return !(creator && creator.isOnline);
+  }
+
+  private async joinExistingGroup(record: GroupWindowRecord, roomKey: string): Promise<void> {
     if (!this.client || this.destroyed) return;
+    const { groupId } = record;
     try {
       this.setState({ statusDetail: "Syncing XMTP group…" });
-      await this.client.conversations.sync();
-      const conv = await this.client.conversations.getConversationById(groupId);
-      if (conv && "sendText" in conv) {
-        await this.attachGroup(conv as Group);
-        return;
-      }
-      // If we aren't in the group yet, wait briefly for leader to add us;
-      // if still not in after 4s and we're leader or relay is isolated, create one.
-      const retryTimer = window.setTimeout(async () => {
-        if (this.destroyed || this.activeGroup) return;
-        try {
-          await this.client?.conversations.sync();
-          const retryConv = await this.client?.conversations.getConversationById(groupId);
-          if (retryConv && "sendText" in retryConv) {
-            await this.attachGroup(retryConv as Group);
-          } else if (this.computeLeader() === this.state.myInboxId || !this.state.relayConnected) {
-            await this.ensureGroupAsLeaderOrFallback(roomKey);
-          }
-        } catch {
-          // Ignore retry error
+      const deadline = Date.now() + JOIN_POLL_MAX_MS;
+      while (!this.destroyed && (!this.activeGroup || this.activeGroup.id !== groupId)) {
+        // Stop polling if a newer group superseded this one
+        if (this.activeWindow && this.activeWindow.groupId !== groupId) return;
+
+        await this.client.conversations.sync();
+        if (this.destroyed) return;
+        const conv = await this.client.conversations.getConversationById(groupId);
+        if (conv && "sendText" in conv) {
+          await this.attachGroup(conv as Group);
+          return;
         }
-      }, 4000);
-      this.timers.push(retryTimer);
+
+        if (Date.now() >= deadline) break;
+        await sleep(JOIN_POLL_INTERVAL_MS);
+      }
+
+      if (this.destroyed || this.activeGroup) return;
+      // After grace period: if the advertised group is orphaned (creator offline)
+      // and we are elected leader, or if the relay is unreachable, take over with epoch + 1.
+      if (
+        (this.computeLeader() === this.state.myInboxId && this.isGroupOrphaned(record)) ||
+        !this.state.relayConnected
+      ) {
+        await this.ensureGroupAsLeaderOrFallback(roomKey, record.epoch + 1);
+      }
     } catch (error) {
       console.warn("[clippy] failed to join existing group:", error);
     }
   }
 
-  private async ensureGroupAsLeaderOrFallback(roomKey: string): Promise<void> {
+  private async ensureGroupAsLeaderOrFallback(roomKey: string, targetEpoch?: number): Promise<void> {
     if (!this.client || this.destroyed || this.activeGroup || this.creatingGroup) return;
     this.creatingGroup = true;
     try {
@@ -527,12 +574,14 @@ export class ClippyEngine {
 
       for (const addr of reachable) this.knownGroupMembers.add(addr);
 
-      // Publish group window to GunDB so other desktop users join the same group
+      // Publish group window to GunDB so other desktop/shoutbox users join the same group.
+      // Use sequential epochs (1, 2, 3...) matching web3-shoutbox-platform.
       if (this.gun && this.state.myInboxId) {
         const now = Date.now();
+        const epoch = targetEpoch ?? (this.activeWindow ? this.activeWindow.epoch + 1 : 1);
         const record: GroupWindowRecord = {
           groupId: group.id,
-          epoch: currentEpoch(),
+          epoch,
           createdBy: this.state.myInboxId,
           createdAt: now,
           expiresAt: now + SLIDING_WINDOW_MINUTES * 60_000,
@@ -580,6 +629,19 @@ export class ClippyEngine {
 
     this.activeGroup = group;
     await group.sync();
+    if (this.destroyed) return;
+
+    // Allow welcome side-effects & MLS key packages to settle, then flush pending commits
+    // (mirrors web3-shoutbox-platform's useXmtpConversation sequence).
+    await sleep(POST_MEMBER_SETTLE_BUFFER_MS);
+    if (this.destroyed) return;
+    try {
+      await group.publishMessages();
+    } catch {
+      // Best-effort flush
+    }
+    await group.sync();
+    if (this.destroyed) return;
 
     // Populate inboxId -> Ethereum address mapping from group members
     try {
@@ -606,16 +668,15 @@ export class ClippyEngine {
     }
     initialMessages.sort((a, b) => a.timestamp - b.timestamp);
 
+    // Publish initial history immediately so messages arriving on the stream
+    // during the settle window append cleanly rather than getting overwritten.
     this.setState({
-      status: "ready",
-      statusDetail: "Connected to XMTP",
-      error: null,
+      statusDetail: "Finalizing encrypted stream…",
       groupId: group.id,
       messages: initialMessages,
     });
-    this.refreshOnlineUsers();
 
-    // Stream new messages
+    // Start live stream before unlocking composer so early replies aren't missed
     let ended = false;
     let endFn: (() => void) | null = null;
     this.stopStream = () => {
@@ -632,10 +693,14 @@ export class ClippyEngine {
           },
         });
         endFn = () => {
-          void stream.return();
+          if (typeof stream.end === "function") {
+            void stream.end();
+          } else {
+            void stream.return();
+          }
         };
         if (ended) {
-          void stream.return();
+          endFn();
           return;
         }
         for await (const msg of stream) {
@@ -668,6 +733,35 @@ export class ClippyEngine {
         }
       }
     })();
+
+    // Give the stream worker time to settle and perform one final catch-up sync
+    await sleep(READY_AFTER_STREAM_START_MS);
+    if (this.destroyed) return;
+    try {
+      await group.sync();
+      const catchUp = await group.messages();
+      const extra: ClippyMessage[] = [];
+      for (const raw of catchUp) {
+        if (typeof raw.content !== "string") continue;
+        if (this.seenMessageIds.has(raw.id)) continue;
+        this.seenMessageIds.add(raw.id);
+        extra.push(this.toClippyMessage(raw, group.id));
+      }
+      if (extra.length > 0) {
+        const merged = [...this.state.messages, ...extra].sort((a, b) => a.timestamp - b.timestamp);
+        this.setState({ messages: merged });
+      }
+    } catch {
+      // Best-effort catch-up
+    }
+
+    this.setState({
+      status: "ready",
+      statusDetail: "Connected to XMTP",
+      error: null,
+      groupId: group.id,
+    });
+    this.refreshOnlineUsers();
   }
 
   private toClippyMessage(

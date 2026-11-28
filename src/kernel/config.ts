@@ -45,6 +45,31 @@ export const ARKIV_PRESETS = [
   },
 ] as const;
 
+const DEFAULT_CLIPPY_XMTP_ENV: "production" | "dev" =
+  (import.meta.env.VITE_XMTP_ENV as string | undefined)?.trim() === "dev" ? "dev" : "production";
+
+const DEFAULT_CLIPPY_ROOM_URL =
+  (import.meta.env.VITE_ALLOWED_ROOMS as string | undefined)
+    ?.split(",")
+    .map((s) => s.trim())
+    .find((s) => s && s !== "*") || "https://shoutbox.pinme.dev/default";
+
+const DEFAULT_CLIPPY_AGENT_ADDRESS =
+  (import.meta.env.VITE_SHOUTBOX_BRIDGE_ADDRESSES as string | undefined)
+    ?.split(",")
+    .map((s) => s.trim())
+    .find((s) => /^0x[0-9a-fA-F]{40}$/.test(s)) || "0x90779a7582aafb91b9ad78e9f3a3cba88ed44042";
+
+export const DEFAULT_CLIPPY_GUN_RELAYS =
+  (import.meta.env.VITE_GUN_RELAY_PEERS as string | undefined)?.trim() ||
+  "https://108-165-23-53.sslip.io/gun";
+
+const LEGACY_LOCAL_GUN_RELAYS = new Set<string>([
+  "",
+  "http://localhost:8765/gun",
+  "http://127.0.0.1:8765/gun",
+]);
+
 export const DEFAULT_CONFIG: HavenOsConfig = {
   arkivNetworkName: "Rabdi",
   arkivRpcUrl: "https://rpc.rabdi.db-chain.testnet.arkiv.network",
@@ -62,10 +87,10 @@ export const DEFAULT_CONFIG: HavenOsConfig = {
   showDebugOverlay: false,
   skipBootScreen: false,
   clippyEnabled: true,
-  clippyXmtpEnv: "production",
-  clippyRoomUrl: "https://shoutbox.pinme.dev/default",
-  clippyAgentAddress: "0x90779a7582aafb91b9ad78e9f3a3cba88ed44042",
-  clippyGunRelays: "http://localhost:8765/gun",
+  clippyXmtpEnv: DEFAULT_CLIPPY_XMTP_ENV,
+  clippyRoomUrl: DEFAULT_CLIPPY_ROOM_URL,
+  clippyAgentAddress: DEFAULT_CLIPPY_AGENT_ADDRESS,
+  clippyGunRelays: DEFAULT_CLIPPY_GUN_RELAYS,
   appMounts: {
     "haven-media": { url: "https://haven-tunes.pinme.dev/" },
     "haven-bay": { url: "https://haven-bay.pinme.dev/" },
@@ -108,11 +133,16 @@ export function loadConfig(): HavenOsConfig {
         }
       }
     }
-    return {
+    const merged: HavenOsConfig = {
       ...DEFAULT_CONFIG,
       ...parsed,
       appMounts: mergedMounts,
     };
+    // Migrate stale localhost GunDB relay URL to the hosted relay on remote origins
+    if (!isLocalOrigin && LEGACY_LOCAL_GUN_RELAYS.has((merged.clippyGunRelays ?? "").trim())) {
+      merged.clippyGunRelays = DEFAULT_CONFIG.clippyGunRelays;
+    }
+    return merged;
   } catch {
     return DEFAULT_CONFIG;
   }

@@ -63,6 +63,10 @@ jobs:
         env:
           VITE_WALLETCONNECT_PROJECT_ID: ${{ secrets.VITE_WALLETCONNECT_PROJECT_ID }}
           VITE_ARKIV_API_KEY: ${{ secrets.ARKIV_API_KEY }}
+          VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV || secrets.VITE_XMTP_ENV || 'production' }}
+          VITE_GUN_RELAY_PEERS: ${{ vars.VITE_GUN_RELAY_PEERS || secrets.VITE_GUN_RELAY_PEERS || 'https://108-165-23-53.sslip.io/gun' }}
+          VITE_ALLOWED_ROOMS: ${{ vars.VITE_ALLOWED_ROOMS || secrets.VITE_ALLOWED_ROOMS || 'https://shoutbox.pinme.dev/default' }}
+          VITE_SHOUTBOX_BRIDGE_ADDRESSES: ${{ vars.VITE_SHOUTBOX_BRIDGE_ADDRESSES || secrets.VITE_SHOUTBOX_BRIDGE_ADDRESSES || '0x90779a7582aafb91b9ad78e9f3a3cba88ed44042' }}
         run: |
           echo "Building Haven OS Web3 Desktop..."
           npm run build

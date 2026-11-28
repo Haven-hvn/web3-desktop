@@ -1,19 +1,41 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import type { AppDefinition, AppId } from "../../../config/apps";
 import { useHavenKernel } from "../../../context/HavenKernelContext";
 import type { WindowInstance } from "../../../hooks/useWindowManager";
 import { HAVEN_OS_BRIDGE_CHANNEL } from "../../../kernel/osBridgeHost";
+import { ErrorBoundary } from "../../ErrorBoundary";
 
-const ExplorerApp = lazy(() => import("./ExplorerApp"));
-const PlanetVisualizerApp = lazy(() => import("./PlanetVisualizerApp"));
-const AtlasApp = lazy(() => import("./AtlasApp"));
-const MicrostoreApp = lazy(() => import("./MicrostoreApp"));
-const ControlPanelApp = lazy(() => import("./ControlPanelApp"));
-const WalletApp = lazy(() => import("./WalletApp"));
-const AboutApp = lazy(() => import("./AboutApp"));
-const NotepadApp = lazy(() => import("./NotepadApp"));
-const ShutdownApp = lazy(() => import("./ShutdownApp"));
-const InstallApp = lazy(() => import("./InstallApp"));
+/**
+ * Retries a dynamic chunk import once on transient IPFS/PinMe gateway glitches
+ * before letting the window-level ErrorBoundary handle it cleanly.
+ */
+function lazyWithRetry<P>(
+  loader: () => Promise<{ default: ComponentType<P> }>,
+): ComponentType<P> {
+  return lazy(async () => {
+    try {
+      return await loader();
+    } catch (firstError) {
+      await new Promise((r) => window.setTimeout(r, 400));
+      try {
+        return await loader();
+      } catch {
+        throw firstError;
+      }
+    }
+  });
+}
+
+const ExplorerApp = lazyWithRetry(() => import("./ExplorerApp"));
+const PlanetVisualizerApp = lazyWithRetry(() => import("./PlanetVisualizerApp"));
+const AtlasApp = lazyWithRetry(() => import("./AtlasApp"));
+const MicrostoreApp = lazyWithRetry(() => import("./MicrostoreApp"));
+const ControlPanelApp = lazyWithRetry(() => import("./ControlPanelApp"));
+const WalletApp = lazyWithRetry(() => import("./WalletApp"));
+const AboutApp = lazyWithRetry(() => import("./AboutApp"));
+const NotepadApp = lazyWithRetry(() => import("./NotepadApp"));
+const ShutdownApp = lazyWithRetry(() => import("./ShutdownApp"));
+const InstallApp = lazyWithRetry(() => import("./InstallApp"));
 
 const OS_NATIVE_APPS: Partial<Record<AppId, ComponentType<{ window: WindowInstance }>>> = {
   explorer: ExplorerApp,
@@ -48,6 +70,7 @@ function buildIframeUrl(baseUrl: string, gateKey?: string, entityKey?: string): 
 export function AppContent({ window: win, app }: AppContentProps) {
   const { config } = useHavenKernel();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const mountKey = app.id as keyof typeof config.appMounts;
   const mountCfg = mountKey in config.appMounts ? config.appMounts[mountKey] : undefined;
@@ -122,8 +145,14 @@ export function AppContent({ window: win, app }: AppContentProps) {
   }
 
   return (
-    <Suspense fallback={<div style={{ padding: 16 }}>Loading {app.name}…</div>}>
-      <NativeComponent window={win} />
-    </Suspense>
+    <ErrorBoundary
+      key={`${win.id}:${app.id}:${retryKey}`}
+      scope={app.name}
+      onReset={() => setRetryKey((k) => k + 1)}
+    >
+      <Suspense fallback={<div style={{ padding: 16 }}>Loading {app.name}…</div>}>
+        <NativeComponent window={win} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

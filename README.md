@@ -29,7 +29,7 @@ Every app on the desktop reads the **same public on-chain data** through one sha
 
 Embedded `*.pinme.dev` iframe apps (`haven-tunes`, `haven-bay`, `fairhaven`, `redhaven`, `feetonfire`) communicate with the desktop over `window.postMessage` on channel `haven-os:v1`.
 
-On `hello` → `welcome`, the host advertises `capabilities: ["arkiv-cache", "media-cache"]` and supports:
+On `hello` → `welcome`, the host advertises `capabilities: ["arkiv-cache", "media-cache", "transfer-dialog"]` and supports:
 
 - **Arkiv entity cache**
   - `haven_getEntities` (`{ grpPrefix?: string, gateKey?: string, refresh?: boolean }`) → returns cached `HavenEntity[]` from the OS kernel.
@@ -41,3 +41,6 @@ On `hello` → `welcome`, the host advertises `capabilities: ["arkiv-cache", "me
   - `haven_mediaCachePut` (`{ key: string, bytes: ArrayBuffer | Uint8Array | Blob, mimeType?: string, encrypted?: boolean, meta?: Record<string, unknown> }`) → returns `{ stored, size, evictedCount, reason? }`.
   - `haven_mediaCacheDelete` (`{ key: string }`) → deletes a cached item.
   - `haven_mediaCacheStats` (`{}`) → returns `{ count, totalBytes, maxBytes }`.
+- **Classic Win98 file transfer dialog**
+  - `haven_reportTransfer` (`{ id, direction: "upload" | "download", label, from?, to?, loaded?, total?, status: "active" | "done" | "error" | "cancelled", detail? }`) → displays the animated flying-paper Win98 transfer window with live segmented progress bar, transfer speed, and ETA.
+  - `haven_clearTransfer` (`{ id: string }`) → dismisses a transfer entry.

@@ -38,7 +38,13 @@ import {
   type HavenEntity,
   type HavenGateRef,
 } from "../kernel/protocol";
-import { HavenOsBridgeHost } from "../kernel/osBridgeHost";
+import { HavenOsBridgeHost, type TransferReport } from "../kernel/osBridgeHost";
+
+export interface ActiveTransfer extends TransferReport {
+  startedAt: number;
+  updatedAt: number;
+  rateBytesPerSec?: number;
+}
 
 export interface WalletState {
   address: string | null;
@@ -65,6 +71,11 @@ export interface HavenKernelValue {
   mediaCacheStats: MediaCacheStats;
   refreshMediaCacheStats: () => Promise<void>;
   clearLocalMediaCache: () => Promise<void>;
+
+  transfers: ActiveTransfer[];
+  reportTransfer: (report: TransferReport) => void;
+  dismissTransfer: (id: string) => void;
+  clearAllTransfers: () => void;
 
   wallet: WalletState;
   discoveredWallets: DiscoveredWallet[];
@@ -101,6 +112,8 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     totalBytes: 0,
     maxBytes: DEFAULT_MEDIA_CACHE_MAX_BYTES,
   });
+  const [transfers, setTransfers] = useState<ActiveTransfer[]>([]);
+  const transferTimersRef = useRef<Map<string, number>>(new Map());
 
   const { address: wagmiAddress, chainId: wagmiChainId, isConnected: wagmiConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
@@ -137,6 +150,94 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     await clearMediaCache();
     await refreshMediaCacheStats();
   }, [refreshMediaCacheStats]);
+
+  const dismissTransfer = useCallback((id: string) => {
+    const existingTimer = transferTimersRef.current.get(id);
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer);
+      transferTimersRef.current.delete(id);
+    }
+    setTransfers((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const clearAllTransfers = useCallback(() => {
+    for (const timer of transferTimersRef.current.values()) {
+      window.clearTimeout(timer);
+    }
+    transferTimersRef.current.clear();
+    setTransfers([]);
+  }, []);
+
+  const reportTransfer = useCallback(
+    (report: TransferReport) => {
+      const now = Date.now();
+      const existingTimer = transferTimersRef.current.get(report.id);
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer);
+        transferTimersRef.current.delete(report.id);
+      }
+
+      if (report.status === "cancelled" && !report.label) {
+        setTransfers((prev) => prev.filter((t) => t.id !== report.id));
+        return;
+      }
+
+      setTransfers((prev) => {
+        const idx = prev.findIndex((t) => t.id === report.id);
+        const prevEntry = idx >= 0 ? prev[idx] : undefined;
+        const startedAt = prevEntry?.startedAt ?? now;
+        const elapsedSec = Math.max(0.15, (now - startedAt) / 1000);
+        const loaded = report.loaded ?? prevEntry?.loaded;
+        const total = report.total ?? prevEntry?.total;
+        const rateBytesPerSec =
+          typeof loaded === "number" && loaded > 0 ? Math.round(loaded / elapsedSec) : prevEntry?.rateBytesPerSec;
+
+        const nextEntry: ActiveTransfer = {
+          ...prevEntry,
+          ...report,
+          label: report.label || prevEntry?.label || "Haven file",
+          loaded,
+          total,
+          startedAt,
+          updatedAt: now,
+          rateBytesPerSec,
+        };
+
+        if (idx >= 0) {
+          const copy = prev.slice();
+          copy[idx] = nextEntry;
+          return copy;
+        }
+        return [...prev, nextEntry];
+      });
+
+      if (report.status === "done" || report.status === "cancelled") {
+        const delayMs = report.status === "done" ? 2200 : 1000;
+        const timer = window.setTimeout(() => {
+          transferTimersRef.current.delete(report.id);
+          setTransfers((prev) => prev.filter((t) => t.id !== report.id));
+        }, delayMs);
+        transferTimersRef.current.set(report.id, timer);
+      } else if (report.status === "error") {
+        const timer = window.setTimeout(() => {
+          transferTimersRef.current.delete(report.id);
+          setTransfers((prev) => prev.filter((t) => t.id !== report.id));
+        }, 6000);
+        transferTimersRef.current.set(report.id, timer);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const timers = transferTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      timers.clear();
+    };
+  }, []);
 
   useEffect(() => {
     void refreshMediaCacheStats();
@@ -374,6 +475,10 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       mediaCacheStats,
       refreshMediaCacheStats,
       clearLocalMediaCache,
+      transfers,
+      reportTransfer,
+      dismissTransfer,
+      clearAllTransfers,
       wallet,
       discoveredWallets,
       connectWallet,
@@ -406,6 +511,10 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       mediaCacheStats,
       refreshMediaCacheStats,
       clearLocalMediaCache,
+      transfers,
+      reportTransfer,
+      dismissTransfer,
+      clearAllTransfers,
       wallet,
       discoveredWallets,
       connectWallet,
@@ -436,6 +545,7 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     unlockGate,
     refreshUniverse,
     refreshMediaCacheStats,
+    reportTransfer,
   });
   latestBridgeStateRef.current = {
     wallet,
@@ -446,6 +556,7 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     unlockGate,
     refreshUniverse,
     refreshMediaCacheStats,
+    reportTransfer,
   };
 
   useEffect(() => {
@@ -458,6 +569,7 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       getEntities: () => latestBridgeStateRef.current.entities,
       refreshEntities: () => latestBridgeStateRef.current.refreshUniverse(),
       onMediaCacheChanged: () => void latestBridgeStateRef.current.refreshMediaCacheStats(),
+      onTransferReport: (report) => latestBridgeStateRef.current.reportTransfer(report),
     });
     host.start();
     bridgeHostRef.current = host;

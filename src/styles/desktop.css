@@ -751,3 +751,212 @@
   top: 1px;
   padding-bottom: 5px;
 }
+
+
+/* ---------- Classic Win98 File Transfer Dialog ---------- */
+
+.transfer-dialog {
+  width: 390px;
+  max-width: calc(100vw - 16px);
+  top: 24px;
+  right: 24px;
+  z-index: 9500;
+}
+
+.transfer-minimized-pill {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 9500;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.transfer-body {
+  padding: 10px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transfer-scene {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2px 0;
+  overflow: hidden;
+}
+
+.transfer-svg {
+  display: block;
+  overflow: visible;
+}
+
+.transfer-paper {
+  opacity: 0;
+  animation: w98-paper-fly 1.8s cubic-bezier(0.35, 0.1, 0.65, 0.9) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.transfer-paper-0 {
+  animation-delay: 0s;
+}
+
+.transfer-paper-1 {
+  animation-delay: 0.6s;
+}
+
+.transfer-paper-2 {
+  animation-delay: 1.2s;
+}
+
+@keyframes w98-paper-fly {
+  0% {
+    opacity: 0;
+    transform: translate(34px, 24px) scale(0.75) rotate(-18deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  32% {
+    transform: translate(86px, 4px) scale(0.95) rotate(-6deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(122px, -2px) scale(1) rotate(4deg);
+  }
+  72% {
+    transform: translate(166px, 6px) scale(0.92) rotate(14deg);
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(206px, 24px) scale(0.72) rotate(22deg);
+  }
+}
+
+.transfer-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transfer-filename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.transfer-filename strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.transfer-route {
+  font-size: 11px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.w98-progress {
+  position: relative;
+  height: 18px;
+  background: var(--theme-surface-variant, #ffffff);
+  border-top: 1px solid var(--theme-border-dark);
+  border-left: 1px solid var(--theme-border-dark);
+  border-right: 1px solid var(--theme-border-light);
+  border-bottom: 1px solid var(--theme-border-light);
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.25);
+  padding: 2px;
+  overflow: hidden;
+}
+
+.w98-progress-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--theme-title-bar-active, #000080) 0 9px,
+    transparent 9px 11px
+  );
+  transition: width 120ms linear;
+}
+
+.w98-progress-fill-err {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--theme-error, #b91c1c) 0 9px,
+    transparent 9px 11px
+  );
+}
+
+.w98-progress-indeterminate {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 34%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--theme-title-bar-active, #000080) 0 9px,
+    transparent 9px 11px
+  );
+  animation: w98-progress-marquee 1.35s linear infinite;
+}
+
+@keyframes w98-progress-marquee {
+  0% {
+    left: -34%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.transfer-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.transfer-extra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 86px;
+  overflow-y: auto;
+  padding-top: 4px;
+  border-top: 1px solid var(--theme-border-dark);
+}
+
+.transfer-extra-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.transfer-extra-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}

@@ -4,6 +4,7 @@ import { useDesktop } from "../../context/DesktopContext";
 import { useHavenKernel } from "../../context/HavenKernelContext";
 import { currentEpochNow } from "../../kernel/protocol";
 import { DesktopIcons } from "./DesktopIcons";
+import { TransferDialog } from "./TransferDialog";
 import { ClippyAssistant } from "./clippy/ClippyAssistant";
 import { StartMenu } from "./startmenu/StartMenu";
 import { Taskbar } from "./taskbar/Taskbar";
@@ -158,6 +159,7 @@ export function Workspace() {
           )}
 
           <WindowLayer />
+          <TransferDialog />
         </div>
       </div>
 

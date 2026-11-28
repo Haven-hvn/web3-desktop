@@ -13,6 +13,22 @@ import { CHAINS, makeGateKey, type HavenEntity, type HavenGateRef } from "./prot
 
 export const HAVEN_OS_BRIDGE_CHANNEL = "haven-os:v1" as const;
 
+export type TransferDirection = "upload" | "download";
+export type TransferStatus = "active" | "done" | "error" | "cancelled";
+
+export interface TransferReport {
+  id: string;
+  direction: TransferDirection;
+  label: string;
+  from?: string;
+  to?: string;
+  loaded?: number;
+  total?: number;
+  status: TransferStatus;
+  detail?: string;
+  appId?: string;
+}
+
 const DEFAULT_ALLOWED_ORIGINS = new Set<string>([
   "https://haven-os.pinme.dev",
   "https://haven.pinme.dev",
@@ -61,6 +77,7 @@ export interface HostBridgeDeps {
   getEntities: () => HavenEntity[];
   refreshEntities: () => Promise<HavenEntity[]>;
   onMediaCacheChanged?: () => void;
+  onTransferReport?: (report: TransferReport) => void;
 }
 
 interface RegisteredClient {
@@ -189,7 +206,7 @@ export class HavenOsBridgeHost {
             config: exportConfig(this.deps.getConfig()),
             unlockedGates: this.deps.getUnlockedKeys().map((k) => k.gateKey),
             entityCount: this.deps.getEntities().length,
-            capabilities: ["arkiv-cache", "media-cache"],
+            capabilities: ["arkiv-cache", "media-cache", "transfer-dialog"],
           },
         },
         origin,
@@ -199,8 +216,9 @@ export class HavenOsBridgeHost {
 
     if (msg.kind !== "request" || !msg.id || !msg.method) return;
 
+    const senderAppId = this.clients.get(target)?.appId;
     try {
-      const outcome = await this.dispatch(msg.method, msg.params);
+      const outcome = await this.dispatch(msg.method, msg.params, senderAppId);
       this.reply(target, origin, msg.id, outcome.result, undefined, outcome.transfer);
     } catch (err) {
       const code = (err as { code?: number })?.code ?? -32000;
@@ -209,7 +227,11 @@ export class HavenOsBridgeHost {
     }
   }
 
-  private async dispatch(method: string, params: unknown): Promise<DispatchOutcome> {
+  private async dispatch(
+    method: string,
+    params: unknown,
+    senderAppId?: string,
+  ): Promise<DispatchOutcome> {
     const w = this.deps.getWallet();
 
     if (method === "haven_getConfig") {
@@ -294,6 +316,46 @@ export class HavenOsBridgeHost {
 
     if (method === "haven_mediaCacheStats") {
       return { result: await getMediaCacheStats() };
+    }
+
+    // Classic Win98 file transfer dialog reporting (uploads & downloads from iframe apps)
+    if (method === "haven_reportTransfer") {
+      const p = (params ?? {}) as Partial<TransferReport>;
+      if (!p.id || typeof p.id !== "string") {
+        throw new Error("haven_reportTransfer requires a string id");
+      }
+      const direction: TransferDirection = p.direction === "upload" ? "upload" : "download";
+      const status: TransferStatus =
+        p.status === "done" || p.status === "error" || p.status === "cancelled"
+          ? p.status
+          : "active";
+      const report: TransferReport = {
+        id: p.id,
+        direction,
+        label: typeof p.label === "string" && p.label.trim() ? p.label.trim() : "Haven file",
+        ...(typeof p.from === "string" ? { from: p.from } : {}),
+        ...(typeof p.to === "string" ? { to: p.to } : {}),
+        ...(typeof p.loaded === "number" && Number.isFinite(p.loaded) ? { loaded: Math.max(0, p.loaded) } : {}),
+        ...(typeof p.total === "number" && Number.isFinite(p.total) && p.total > 0 ? { total: p.total } : {}),
+        status,
+        ...(typeof p.detail === "string" ? { detail: p.detail } : {}),
+        appId: typeof p.appId === "string" && p.appId ? p.appId : senderAppId,
+      };
+      this.deps.onTransferReport?.(report);
+      return { result: { ok: true } };
+    }
+
+    if (method === "haven_clearTransfer") {
+      const p = (params ?? {}) as { id?: string };
+      if (p.id && typeof p.id === "string") {
+        this.deps.onTransferReport?.({
+          id: p.id,
+          direction: "download",
+          label: "",
+          status: "cancelled",
+        });
+      }
+      return { result: { ok: true } };
     }
 
     if (method === "haven_getGateKey") {

@@ -3,8 +3,8 @@ import { useHavenKernel } from "../../../context/HavenKernelContext";
 import { useTheme } from "../../../context/ThemeProvider";
 import type { WindowInstance } from "../../../hooks/useWindowManager";
 import { probeArkiv } from "../../../kernel/arkiv";
-import { ARKIV_PRESETS, type AppRuntimeMode } from "../../../kernel/config";
-import { shortAddress } from "../../../kernel/protocol";
+import { ARKIV_PRESETS } from "../../../kernel/config";
+import { formatBytes, shortAddress } from "../../../kernel/protocol";
 
 type SettingsTab = "networks" | "keyring" | "mounts" | "clippy" | "appearance";
 
@@ -15,6 +15,9 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
     resetConfig,
     refreshUniverse,
     clearLocalArkivCache,
+    mediaCacheStats,
+    refreshMediaCacheStats,
+    clearLocalMediaCache,
     unlockedKeys,
     forgetAllKeys,
     wallet,
@@ -47,15 +50,12 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
     }
   };
 
-  const setMount = (
-    appKey: keyof typeof draft.appMounts,
-    patch: { mode?: AppRuntimeMode; url?: string },
-  ) => {
+  const setMountUrl = (appKey: keyof typeof draft.appMounts, url: string) => {
     setDraft((prev) => ({
       ...prev,
       appMounts: {
         ...prev.appMounts,
-        [appKey]: { ...prev.appMounts[appKey], ...patch },
+        [appKey]: { url },
       },
     }));
   };
@@ -229,10 +229,11 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
             </fieldset>
 
             <fieldset className="w98-groupbox">
-              <legend>Local Arkiv Entity Cache</legend>
+              <legend>Shared Arkiv Entity Cache</legend>
               <div style={{ fontSize: 12, marginBottom: 8 }}>
-                Currently indexed: <strong>{entities.length}</strong> Haven entities · Active
-                wallet: <strong className="mono">{wallet.address ?? "Guest"}</strong>
+                Currently indexed: <strong>{entities.length}</strong> Haven entities (shared with
+                embedded apps via <code>haven_getEntities</code>) · Active wallet:{" "}
+                <strong className="mono">{wallet.address ?? "Guest"}</strong>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
@@ -251,48 +252,64 @@ export default function ControlPanelApp({ window: win }: { window: WindowInstanc
                 </button>
               </div>
             </fieldset>
+
+            <fieldset className="w98-groupbox">
+              <legend>Shared Playback &amp; Media Cache (IndexedDB)</legend>
+              <div style={{ fontSize: 12, marginBottom: 8 }}>
+                Cached files: <strong>{mediaCacheStats.count}</strong> · Using{" "}
+                <strong className="mono">{formatBytes(mediaCacheStats.totalBytes)}</strong> of{" "}
+                <strong className="mono">{formatBytes(mediaCacheStats.maxBytes)}</strong> LRU budget
+                (shared across embedded apps via <code>haven_mediaCache*</code>).
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="w98-button"
+                  onClick={() => void refreshMediaCacheStats()}
+                >
+                  🔄 Refresh Usage
+                </button>
+                <button
+                  type="button"
+                  className="w98-button"
+                  onClick={() => void clearLocalMediaCache()}
+                >
+                  🗑️ Clear Media Cache
+                </button>
+              </div>
+            </fieldset>
           </>
         )}
 
         {tab === "mounts" && (
           <fieldset className="w98-groupbox">
-            <legend>App Runtime Modes (Native OS Kernel vs. Embedded Iframe Bundle)</legend>
+            <legend>Embedded App Bundle URLs (iframe)</legend>
             <p style={{ margin: "0 0 10px", fontSize: 11 }}>
-              Each Haven app runs in <strong>Native OS Mode</strong> by default (sharing the OS
-              wallet, VetKD keyring, and Arkiv query bus). Switch any app to{" "}
-              <strong>Embedded Iframe</strong> to host its standalone Next.js/Vite static build at
-              a subpath or external URL.
+              Each Haven app runs as an embedded iframe bundle connected to the OS{" "}
+              <code>haven-os:v1</code> bridge (shared wallet, VetKD keyring, Arkiv entity cache,
+              and IndexedDB media cache). Point any app to a custom or local dev URL below.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(
                 [
-                  ["haven-media", "🎵 Haven Tunes 2000 (haven-tunes)", true],
-                  ["haven-bay", "🏴‍☠️ The Haven Bay (haven-bay)", false],
-                  ["fairhaven", "🍀 Fairhaven (4chan)", true],
-                  ["redhaven", "👽 Redhaven (Reddit)", true],
-                  ["feetonfire", "🔥 FeetOnFire (StepMania DDR)", true],
+                  ["haven-media", "🎵 Haven Tunes 2000 (haven-tunes)"],
+                  ["haven-bay", "🏴‍☠️ The Haven Bay (haven-bay)"],
+                  ["fairhaven", "🍀 Fairhaven (4chan)"],
+                  ["redhaven", "👽 Redhaven (Reddit)"],
+                  ["feetonfire", "🔥 FeetOnFire (StepMania DDR)"],
                 ] as const
-              ).map(([key, label, hasNative]) => (
+              ).map(([key, label]) => (
                 <div
                   key={key}
                   className="w98-panel"
                   style={{ padding: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
                 >
-                  <strong style={{ minWidth: 195 }}>{label}</strong>
-                  <select
-                    className="w98-field"
-                    value={hasNative ? draft.appMounts[key].mode : "iframe"}
-                    disabled={!hasNative}
-                    onChange={(e) => setMount(key, { mode: e.target.value as AppRuntimeMode })}
-                  >
-                    {hasNative && <option value="native">Native OS Mode (Shared Kernel)</option>}
-                    <option value="iframe">Embedded Bundle (iframe)</option>
-                  </select>
+                  <strong style={{ minWidth: 210 }}>{label}</strong>
                   <input
                     className="w98-field mono"
-                    style={{ flex: 1, minWidth: 180 }}
+                    style={{ flex: 1, minWidth: 200 }}
                     value={draft.appMounts[key].url}
-                    onChange={(e) => setMount(key, { url: e.target.value })}
+                    onChange={(e) => setMountUrl(key, e.target.value)}
                   />
                 </div>
               ))}

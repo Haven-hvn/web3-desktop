@@ -1,7 +1,15 @@
 import type { UnlockedEpochEntry } from "./aol";
 import type { HavenOsConfig } from "./config";
 import type { Eip1193Provider } from "./evm";
-import { CHAINS, makeGateKey, type HavenGateRef } from "./protocol";
+import {
+  deleteCachedMedia,
+  getCachedMedia,
+  getMediaCacheStats,
+  hasCachedMedia,
+  putCachedMedia,
+  type MediaCachePutInput,
+} from "./mediaCache";
+import { CHAINS, makeGateKey, type HavenEntity, type HavenGateRef } from "./protocol";
 
 export const HAVEN_OS_BRIDGE_CHANNEL = "haven-os:v1" as const;
 
@@ -50,12 +58,20 @@ export interface HostBridgeDeps {
   getConfig: () => HavenOsConfig;
   getUnlockedKeys: () => UnlockedEpochEntry[];
   unlockGate: (gate: HavenGateRef, epoch?: number) => Promise<UnlockedEpochEntry>;
+  getEntities: () => HavenEntity[];
+  refreshEntities: () => Promise<HavenEntity[]>;
+  onMediaCacheChanged?: () => void;
 }
 
 interface RegisteredClient {
   win: Window;
   origin: string;
   appId?: string;
+}
+
+interface DispatchOutcome {
+  result: unknown;
+  transfer?: Transferable[];
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -94,7 +110,12 @@ export class HavenOsBridgeHost {
   }
 
   broadcast(
-    event: "accountsChanged" | "chainChanged" | "configChanged" | "keyringChanged",
+    event:
+      | "accountsChanged"
+      | "chainChanged"
+      | "configChanged"
+      | "keyringChanged"
+      | "entitiesChanged",
     data: unknown,
   ): void {
     for (const [win, client] of Array.from(this.clients.entries())) {
@@ -124,16 +145,19 @@ export class HavenOsBridgeHost {
     id: string,
     result?: unknown,
     error?: { code: number; message: string },
+    transfer?: Transferable[],
   ): void {
-    target.postMessage(
-      {
-        channel: HAVEN_OS_BRIDGE_CHANNEL,
-        kind: "response",
-        id,
-        ...(error ? { error } : { result }),
-      },
-      origin,
-    );
+    const payload = {
+      channel: HAVEN_OS_BRIDGE_CHANNEL,
+      kind: "response",
+      id,
+      ...(error ? { error } : { result }),
+    };
+    if (transfer && transfer.length > 0) {
+      target.postMessage(payload, origin, transfer);
+    } else {
+      target.postMessage(payload, origin);
+    }
   }
 
   private async handleMessage(ev: MessageEvent): Promise<void> {
@@ -164,6 +188,8 @@ export class HavenOsBridgeHost {
             },
             config: exportConfig(this.deps.getConfig()),
             unlockedGates: this.deps.getUnlockedKeys().map((k) => k.gateKey),
+            entityCount: this.deps.getEntities().length,
+            capabilities: ["arkiv-cache", "media-cache"],
           },
         },
         origin,
@@ -174,8 +200,8 @@ export class HavenOsBridgeHost {
     if (msg.kind !== "request" || !msg.id || !msg.method) return;
 
     try {
-      const result = await this.dispatch(msg.method, msg.params);
-      this.reply(target, origin, msg.id, result);
+      const outcome = await this.dispatch(msg.method, msg.params);
+      this.reply(target, origin, msg.id, outcome.result, undefined, outcome.transfer);
     } catch (err) {
       const code = (err as { code?: number })?.code ?? -32000;
       const message = err instanceof Error ? err.message : String(err);
@@ -183,11 +209,91 @@ export class HavenOsBridgeHost {
     }
   }
 
-  private async dispatch(method: string, params: unknown): Promise<unknown> {
+  private async dispatch(method: string, params: unknown): Promise<DispatchOutcome> {
     const w = this.deps.getWallet();
 
     if (method === "haven_getConfig") {
-      return exportConfig(this.deps.getConfig());
+      return { result: exportConfig(this.deps.getConfig()) };
+    }
+
+    // Shared Arkiv entity cache (synced across all embedded apps + Gate Explorer)
+    if (method === "haven_getEntities") {
+      const p = (params ?? {}) as {
+        grpPrefix?: string;
+        gateKey?: string;
+        refresh?: boolean;
+      };
+      let list = p.refresh ? await this.deps.refreshEntities() : this.deps.getEntities();
+      if (p.grpPrefix) {
+        list = list.filter((e) => e.grp.startsWith(p.grpPrefix!));
+      }
+      if (p.gateKey) {
+        list = list.filter((e) => e.gateKey === p.gateKey);
+      }
+      return { result: list };
+    }
+
+    // Shared IndexedDB playback / media cache (zero-copy ArrayBuffer transfer on get)
+    if (method === "haven_mediaCacheGet") {
+      const p = (params ?? {}) as { key?: string };
+      if (!p.key || typeof p.key !== "string") {
+        throw new Error("haven_mediaCacheGet requires a string key");
+      }
+      const record = await getCachedMedia(p.key);
+      if (!record) return { result: null };
+      return {
+        result: {
+          key: record.key,
+          bytes: record.bytes,
+          mimeType: record.mimeType,
+          size: record.size,
+          encrypted: record.encrypted,
+          createdAt: record.createdAt,
+          lastAccessedAt: record.lastAccessedAt,
+          meta: record.meta,
+        },
+        transfer: [record.bytes],
+      };
+    }
+
+    if (method === "haven_mediaCacheHas") {
+      const p = (params ?? {}) as { key?: string };
+      if (!p.key || typeof p.key !== "string") {
+        throw new Error("haven_mediaCacheHas requires a string key");
+      }
+      return { result: await hasCachedMedia(p.key) };
+    }
+
+    if (method === "haven_mediaCachePut") {
+      const p = (params ?? {}) as Partial<MediaCachePutInput>;
+      if (!p.key || typeof p.key !== "string" || !p.bytes) {
+        throw new Error("haven_mediaCachePut requires { key, bytes }");
+      }
+      const res = await putCachedMedia({
+        key: p.key,
+        bytes: p.bytes,
+        mimeType: p.mimeType,
+        encrypted: p.encrypted,
+        meta: p.meta,
+      });
+      if (res.stored) {
+        this.deps.onMediaCacheChanged?.();
+      }
+      return { result: res };
+    }
+
+    if (method === "haven_mediaCacheDelete") {
+      const p = (params ?? {}) as { key?: string };
+      if (!p.key || typeof p.key !== "string") {
+        throw new Error("haven_mediaCacheDelete requires a string key");
+      }
+      await deleteCachedMedia(p.key);
+      this.deps.onMediaCacheChanged?.();
+      return { result: { deleted: true } };
+    }
+
+    if (method === "haven_mediaCacheStats") {
+      return { result: await getMediaCacheStats() };
     }
 
     if (method === "haven_getGateKey") {
@@ -226,16 +332,18 @@ export class HavenOsBridgeHost {
         }
         return false;
       });
-      if (!found) return null;
+      if (!found) return { result: null };
       const derived = await found.vetKey.deriveSymmetricKey("haven-aes-256-gcm", 32);
       return {
-        gateId: found.gateKey,
-        epoch: found.epoch,
-        rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
-        vetKeyBase64: bytesToBase64(found.vetKey.serialize()),
-        chainVariant: found.chainVariant,
-        tokenAddress: found.tokenAddress,
-        threshold: found.threshold,
+        result: {
+          gateId: found.gateKey,
+          epoch: found.epoch,
+          rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
+          vetKeyBase64: bytesToBase64(found.vetKey.serialize()),
+          chainVariant: found.chainVariant,
+          tokenAddress: found.tokenAddress,
+          threshold: found.threshold,
+        },
       };
     }
 
@@ -270,22 +378,24 @@ export class HavenOsBridgeHost {
       const entry = await this.deps.unlockGate(gateRef, p.epoch);
       const derived = await entry.vetKey.deriveSymmetricKey("haven-aes-256-gcm", 32);
       return {
-        gateId: p.gateId || makeGateKey(gateRef),
-        epoch: entry.epoch,
-        rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
-        vetKeyBase64: bytesToBase64(entry.vetKey.serialize()),
-        chainVariant: entry.chainVariant,
-        tokenAddress: entry.tokenAddress,
-        threshold: entry.threshold,
+        result: {
+          gateId: p.gateId || makeGateKey(gateRef),
+          epoch: entry.epoch,
+          rawKeyBase64: bytesToBase64(new Uint8Array(derived)),
+          vetKeyBase64: bytesToBase64(entry.vetKey.serialize()),
+          chainVariant: entry.chainVariant,
+          tokenAddress: entry.tokenAddress,
+          threshold: entry.threshold,
+        },
       };
     }
 
     if (method === "eth_accounts") {
-      return w.address ? [w.address] : [];
+      return { result: w.address ? [w.address] : [] };
     }
 
     if (method === "eth_chainId") {
-      return w.chainId != null ? `0x${w.chainId.toString(16)}` : "0x1";
+      return { result: w.chainId != null ? `0x${w.chainId.toString(16)}` : "0x1" };
     }
 
     if (method === "eth_requestAccounts") {
@@ -293,7 +403,7 @@ export class HavenOsBridgeHost {
         await this.deps.connectWallet();
       }
       const next = this.deps.getWallet();
-      return next.address ? [next.address] : [];
+      return { result: next.address ? [next.address] : [] };
     }
 
     // Forward signing, chain-switching, and RPC calls needed by viem / Synapse / Arkiv writes
@@ -318,10 +428,11 @@ export class HavenOsBridgeHost {
       if (!w.provider) {
         throw new Error("Haven OS wallet is not connected (or is in watch-only mode).");
       }
-      return w.provider.request({
+      const res = await w.provider.request({
         method,
         params: Array.isArray(params) ? params : params != null ? [params] : [],
       });
+      return { result: res };
     }
 
     throw new Error(`Unsupported Haven OS bridge method: ${method}`);

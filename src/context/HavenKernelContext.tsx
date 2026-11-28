@@ -9,9 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  decryptEntityText,
   epochKeyringId,
-  fetchAndDecryptEntityMedia,
   unlockGateEpochV3,
   type UnlockedEpochEntry,
 } from "../kernel/aol";
@@ -24,6 +22,12 @@ import {
 } from "../kernel/arkiv";
 import { DEFAULT_CONFIG, loadConfig, saveConfig, type HavenOsConfig } from "../kernel/config";
 import { inspectGateToken, type DiscoveredWallet, type Eip1193Provider } from "../kernel/evm";
+import {
+  clearMediaCache,
+  DEFAULT_MEDIA_CACHE_MAX_BYTES,
+  getMediaCacheStats,
+  type MediaCacheStats,
+} from "../kernel/mediaCache";
 import { useAccount, useDisconnect } from "wagmi";
 import { modal } from "../lib/reown";
 import {
@@ -55,8 +59,12 @@ export interface HavenKernelValue {
   loadingUniverse: boolean;
   scanStatus: string;
   scanError: string | null;
-  refreshUniverse: () => Promise<void>;
+  refreshUniverse: () => Promise<HavenEntity[]>;
   clearLocalArkivCache: () => void;
+
+  mediaCacheStats: MediaCacheStats;
+  refreshMediaCacheStats: () => Promise<void>;
+  clearLocalMediaCache: () => Promise<void>;
 
   wallet: WalletState;
   discoveredWallets: DiscoveredWallet[];
@@ -71,21 +79,13 @@ export interface HavenKernelValue {
   findUnlockedKey: (gate?: HavenGateRef, epoch?: number) => UnlockedEpochEntry | undefined;
   forgetAllKeys: () => void;
 
-  decryptedTexts: Record<string, string>;
-  decryptTextForEntity: (entity: HavenEntity) => Promise<string>;
-  decryptMediaForEntity: (entity: HavenEntity) => Promise<{ blobUrl: string; mimeType: string; bytes: number }>;
-
   gateTokenMeta: Record<string, GateTokenMetadata>;
   checkingGates: boolean;
   inspectGate: (gate: HavenGateRef) => Promise<GateTokenMetadata>;
   getGateMeta: (gate?: HavenGateRef) => GateTokenMetadata | undefined;
   recheckGateMemberships: () => Promise<void>;
-
-  votes: Record<string, -1 | 0 | 1>;
-  castVote: (entityKey: string, dir: -1 | 0 | 1) => void;
 }
 
-const VOTES_STORAGE_KEY = "haven-os:redhaven-votes:v1";
 const HavenKernelContext = createContext<HavenKernelValue | null>(null);
 
 export function HavenKernelProvider({ children }: { children: ReactNode }) {
@@ -95,6 +95,12 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   const [loadingUniverse, setLoadingUniverse] = useState(false);
   const [scanStatus, setScanStatus] = useState("Ready");
   const [scanError, setScanError] = useState<string | null>(null);
+
+  const [mediaCacheStats, setMediaCacheStats] = useState<MediaCacheStats>({
+    count: 0,
+    totalBytes: 0,
+    maxBytes: DEFAULT_MEDIA_CACHE_MAX_BYTES,
+  });
 
   const { address: wagmiAddress, chainId: wagmiChainId, isConnected: wagmiConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
@@ -111,23 +117,30 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
   const [unlockedMap, setUnlockedMap] = useState<Record<string, UnlockedEpochEntry>>({});
   const [unlockingGateKey, setUnlockingGateKey] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
-  const [decryptedTexts, setDecryptedTexts] = useState<Record<string, string>>({});
   const [gateTokenMeta, setGateTokenMeta] = useState<Record<string, GateTokenMetadata>>({});
   const [checkingGates, setCheckingGates] = useState(false);
   const gateTokenMetaRef = useRef(gateTokenMeta);
   gateTokenMetaRef.current = gateTokenMeta;
 
-  const [votes, setVotes] = useState<Record<string, -1 | 0 | 1>>(() => {
-    try {
-      const raw = localStorage.getItem(VOTES_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, -1 | 0 | 1>) : {};
-    } catch {
-      return {};
-    }
-  });
-
   const configRef = useRef(config);
   configRef.current = config;
+
+  const entitiesRef = useRef(entities);
+  entitiesRef.current = entities;
+
+  const refreshMediaCacheStats = useCallback(async () => {
+    const stats = await getMediaCacheStats();
+    setMediaCacheStats(stats);
+  }, []);
+
+  const clearLocalMediaCache = useCallback(async () => {
+    await clearMediaCache();
+    await refreshMediaCacheStats();
+  }, [refreshMediaCacheStats]);
+
+  useEffect(() => {
+    void refreshMediaCacheStats();
+  }, [refreshMediaCacheStats]);
 
   // Sync wagmi/Reown account into wallet state (single source; watch-only wins).
   useEffect(() => {
@@ -175,7 +188,7 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     setConfig(DEFAULT_CONFIG);
   }, []);
 
-  const refreshUniverse = useCallback(async () => {
+  const refreshUniverse = useCallback(async (): Promise<HavenEntity[]> => {
     const cfg = configRef.current;
     setLoadingUniverse(true);
     setScanError(null);
@@ -186,15 +199,17 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       if (!probe.online) {
         setScanError(`Arkiv RPC unreachable: ${probe.error ?? "network error"}`);
         setScanStatus("Offline");
-        return;
+        return entitiesRef.current;
       }
       const list = await fetchHavenUniverse(cfg, (msg) => setScanStatus(msg));
       setEntities(list);
       setScanStatus(`${list.length} Haven entities indexed from ${cfg.arkivNetworkName}`);
+      return list;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setScanError(msg);
       setScanStatus("Scan interrupted");
+      return entitiesRef.current;
     } finally {
       setLoadingUniverse(false);
     }
@@ -281,42 +296,8 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
 
   const forgetAllKeys = useCallback(() => {
     setUnlockedMap({});
-    setDecryptedTexts({});
     setUnlockError(null);
   }, []);
-
-  const decryptTextForEntity = useCallback(
-    async (entity: HavenEntity): Promise<string> => {
-      if (entity.clearText) return entity.clearText;
-      if (decryptedTexts[entity.key]) return decryptedTexts[entity.key];
-      const gate = entity.gate;
-      if (!gate) throw new Error("Entity has no gate metadata");
-      let entry = findUnlockedKey(gate, gate.epoch);
-      if (!entry) {
-        entry = await unlockGate(gate, gate.epoch);
-      }
-      const text = await decryptEntityText(entity, entry.vetKey);
-      setDecryptedTexts((prev) => ({ ...prev, [entity.key]: text }));
-      return text;
-    },
-    [decryptedTexts, findUnlockedKey, unlockGate],
-  );
-
-  const decryptMediaForEntity = useCallback(
-    async (entity: HavenEntity) => {
-      if (entity.media?.fcid) {
-        return fetchAndDecryptEntityMedia(configRef.current, entity);
-      }
-      const gate = entity.gate;
-      if (!gate) throw new Error("Sealed media missing gate metadata");
-      let entry = findUnlockedKey(gate, gate.epoch);
-      if (!entry) {
-        entry = await unlockGate(gate, gate.epoch);
-      }
-      return fetchAndDecryptEntityMedia(configRef.current, entity, entry.vetKey);
-    },
-    [findUnlockedKey, unlockGate],
-  );
 
   const gateMetaId = useCallback(
     (gate: HavenGateRef, addr?: string | null) =>
@@ -348,18 +329,6 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     },
     [gateMetaId, wallet.address],
   );
-
-  const castVote = useCallback((entityKey: string, dir: -1 | 0 | 1) => {
-    setVotes((prev) => {
-      const next = { ...prev, [entityKey]: prev[entityKey] === dir ? 0 : dir };
-      try {
-        localStorage.setItem(VOTES_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
 
   const gates = useMemo(() => buildGateDirectory(entities), [entities]);
   const unlockedKeys = useMemo(() => Object.values(unlockedMap), [unlockedMap]);
@@ -402,6 +371,9 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       scanError,
       refreshUniverse,
       clearLocalArkivCache,
+      mediaCacheStats,
+      refreshMediaCacheStats,
+      clearLocalMediaCache,
       wallet,
       discoveredWallets,
       connectWallet,
@@ -413,16 +385,11 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       unlockGate,
       findUnlockedKey,
       forgetAllKeys,
-      decryptedTexts,
-      decryptTextForEntity,
-      decryptMediaForEntity,
       gateTokenMeta,
       checkingGates,
       inspectGate,
       getGateMeta,
       recheckGateMemberships,
-      votes,
-      castVote,
     }),
     [
       config,
@@ -436,6 +403,9 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       scanError,
       refreshUniverse,
       clearLocalArkivCache,
+      mediaCacheStats,
+      refreshMediaCacheStats,
+      clearLocalMediaCache,
       wallet,
       discoveredWallets,
       connectWallet,
@@ -447,16 +417,11 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       unlockGate,
       findUnlockedKey,
       forgetAllKeys,
-      decryptedTexts,
-      decryptTextForEntity,
-      decryptMediaForEntity,
       gateTokenMeta,
       checkingGates,
       inspectGate,
       getGateMeta,
       recheckGateMemberships,
-      votes,
-      castVote,
     ],
   );
 
@@ -466,15 +431,21 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
     wallet,
     config,
     unlockedKeys,
+    entities,
     connectWallet,
     unlockGate,
+    refreshUniverse,
+    refreshMediaCacheStats,
   });
   latestBridgeStateRef.current = {
     wallet,
     config,
     unlockedKeys,
+    entities,
     connectWallet,
     unlockGate,
+    refreshUniverse,
+    refreshMediaCacheStats,
   };
 
   useEffect(() => {
@@ -484,6 +455,9 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       getConfig: () => latestBridgeStateRef.current.config,
       getUnlockedKeys: () => latestBridgeStateRef.current.unlockedKeys,
       unlockGate: (gate, epoch) => latestBridgeStateRef.current.unlockGate(gate, epoch),
+      getEntities: () => latestBridgeStateRef.current.entities,
+      refreshEntities: () => latestBridgeStateRef.current.refreshUniverse(),
+      onMediaCacheChanged: () => void latestBridgeStateRef.current.refreshMediaCacheStats(),
     });
     host.start();
     bridgeHostRef.current = host;
@@ -539,6 +513,10 @@ export function HavenKernelProvider({ children }: { children: ReactNode }) {
       unlockedKeys.map((k) => k.gateKey),
     );
   }, [unlockedKeys]);
+
+  useEffect(() => {
+    bridgeHostRef.current?.broadcast("entitiesChanged", entities);
+  }, [entities]);
 
   return <HavenKernelContext.Provider value={value}>{children}</HavenKernelContext.Provider>;
 }

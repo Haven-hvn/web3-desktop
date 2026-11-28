@@ -12,7 +12,6 @@ export interface WindowLaunchParams {
   gateKey?: string;
   entityKey?: string;
   tab?: string;
-  forceMode?: "native" | "iframe";
 }
 
 export interface WindowInstance extends WindowGeometry {

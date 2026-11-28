@@ -1,7 +1,4 @@
-export type AppRuntimeMode = "native" | "iframe";
-
 export interface AppMountConfig {
-  mode: AppRuntimeMode;
   url: string;
 }
 
@@ -70,11 +67,11 @@ export const DEFAULT_CONFIG: HavenOsConfig = {
   clippyAgentAddress: "0x90779a7582aafb91b9ad78e9f3a3cba88ed44042",
   clippyGunRelays: "http://localhost:8765/gun",
   appMounts: {
-    "haven-media": { mode: "iframe", url: "https://haven-tunes.pinme.dev/" },
-    "haven-bay": { mode: "iframe", url: "https://haven-bay.pinme.dev/" },
-    fairhaven: { mode: "iframe", url: "https://fairhaven.pinme.dev/" },
-    redhaven: { mode: "iframe", url: "https://redhaven.pinme.dev/" },
-    feetonfire: { mode: "iframe", url: "https://feetonfire.pinme.dev/" },
+    "haven-media": { url: "https://haven-tunes.pinme.dev/" },
+    "haven-bay": { url: "https://haven-bay.pinme.dev/" },
+    fairhaven: { url: "https://fairhaven.pinme.dev/" },
+    redhaven: { url: "https://redhaven.pinme.dev/" },
+    feetonfire: { url: "https://feetonfire.pinme.dev/" },
   },
 };
 
@@ -94,8 +91,11 @@ export function loadConfig(): HavenOsConfig {
     if (!raw) return DEFAULT_CONFIG;
     const parsed = JSON.parse(raw) as Partial<HavenOsConfig>;
     const mergedMounts: HavenOsConfig["appMounts"] = {
-      ...DEFAULT_CONFIG.appMounts,
-      ...(parsed.appMounts ?? {}),
+      "haven-media": { url: parsed.appMounts?.["haven-media"]?.url || DEFAULT_CONFIG.appMounts["haven-media"].url },
+      "haven-bay": { url: parsed.appMounts?.["haven-bay"]?.url || DEFAULT_CONFIG.appMounts["haven-bay"].url },
+      fairhaven: { url: parsed.appMounts?.fairhaven?.url || DEFAULT_CONFIG.appMounts.fairhaven.url },
+      redhaven: { url: parsed.appMounts?.redhaven?.url || DEFAULT_CONFIG.appMounts.redhaven.url },
+      feetonfire: { url: parsed.appMounts?.feetonfire?.url || DEFAULT_CONFIG.appMounts.feetonfire.url },
     };
     // Migrate stale local /apps/... mount URLs to canonical PinMe URLs on remote origins
     const isLocalOrigin =

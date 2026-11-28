@@ -22,5 +22,22 @@ Every app on the desktop reads the **same public on-chain data** through one sha
 - **🔥 FeetOnFire (`feetonfire`)** — StepMania / DDR social pack browser (`haven.file.full` `x.dance`) and embedded rhythm game frame.
 - **🌐 Haven Atlas (`atlas`)** — Live browser probes for Arkiv Rabdi, EVM L2s, Filecoin FEVM, and ICP VetKD epoch clock.
 - **🛒 Microstore (`microstore`)** — Curated `awesome-haven` catalog of built & proposed UIs around the same Filecoin CIDs.
-- **⚙️ Control Panel (`settings`)** — Live network presets (`Rabdi` / `localhost` / custom RPC), ICP canister & gateway settings, OS VetKD Keyring manager, App Runtime Modes (Native vs. Embedded Iframe), and Themes.
+- **⚙️ Control Panel (`settings`)** — Live network presets (`Rabdi` / `localhost` / custom RPC), ICP canister & gateway settings, OS VetKD Keyring & shared cache manager, Embedded App Mount URLs, and Themes.
 - **🔑 Wallet & Keys (`wallet`)** — EIP-6963 / injected EVM wallet connection, Watch-Only address gate balance checks, and VetKD epoch unlocks.
+
+## Shared Cache Bridge (`haven-os:v1`)
+
+Embedded `*.pinme.dev` iframe apps (`haven-tunes`, `haven-bay`, `fairhaven`, `redhaven`, `feetonfire`) communicate with the desktop over `window.postMessage` on channel `haven-os:v1`.
+
+On `hello` → `welcome`, the host advertises `capabilities: ["arkiv-cache", "media-cache"]` and supports:
+
+- **Arkiv entity cache**
+  - `haven_getEntities` (`{ grpPrefix?: string, gateKey?: string, refresh?: boolean }`) → returns cached `HavenEntity[]` from the OS kernel.
+  - Event `entitiesChanged` → broadcast whenever the OS Arkiv index updates.
+  - Event `openEntity` (`{ gateKey?, entityKey? }`) → sent when the user deep-links an entity into an already-open iframe window.
+- **Shared playback / media cache (IndexedDB, 512 MiB LRU)**
+  - `haven_mediaCacheGet` (`{ key: string }`) → returns `{ key, bytes: ArrayBuffer, mimeType, size, encrypted, createdAt, lastAccessedAt, meta } | null` (uses zero-copy transferable `ArrayBuffer`).
+  - `haven_mediaCacheHas` (`{ key: string }`) → returns `boolean`.
+  - `haven_mediaCachePut` (`{ key: string, bytes: ArrayBuffer | Uint8Array | Blob, mimeType?: string, encrypted?: boolean, meta?: Record<string, unknown> }`) → returns `{ stored, size, evictedCount, reason? }`.
+  - `haven_mediaCacheDelete` (`{ key: string }`) → deletes a cached item.
+  - `haven_mediaCacheStats` (`{}`) → returns `{ count, totalBytes, maxBytes }`.
